@@ -1,0 +1,237 @@
+/**
+ * Canonical types for the Whizurai capability-first SDK.
+ *
+ * The platform's public surface is capability-first: you list/execute
+ * capabilities, track their runs, and read the resulting artifacts. The
+ * low-level workflow-authoring surface is intentionally NOT exposed here.
+ */
+
+// ─── Client configuration ──────────────────────────────────────────────────
+
+export interface WhizuraiConfig {
+  /** API key (sk_live_… / sk_test_…). Sent as `X-API-Key` and `Authorization: Bearer`. */
+  apiKey: string;
+  /** Base URL of the platform gateway. Defaults to https://api.whizurai.com */
+  baseUrl?: string;
+  /** Per-request timeout in ms. Default: 30_000 */
+  timeout?: number;
+}
+
+// ─── Run lifecycle ─────────────────────────────────────────────────────────
+
+export type RunStatus =
+  | 'pending'
+  | 'running'
+  | 'succeeded'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+/** Statuses at which a run is finished and will not change further. */
+export const TERMINAL_RUN_STATUSES: readonly RunStatus[] = [
+  'succeeded',
+  'completed',
+  'failed',
+  'cancelled',
+];
+
+export interface Run {
+  id: string;
+  /** Underlying workflow run ID, when surfaced by the platform. */
+  workflowRunId?: string;
+  capabilityId?: string;
+  capabilitySlug?: string;
+  status: RunStatus;
+  input?: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  result?: Record<string, unknown>;
+  artifacts?: Artifact[];
+  artifactRefs?: { images?: string[]; videos?: string[]; json?: string[] };
+  error?: { message: string; code?: string };
+  errorMessage?: string;
+  progress?: number;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  updatedAt?: string;
+}
+
+export interface ListRunsResponse {
+  runs: Run[];
+  total?: number;
+  nextCursor?: string | null;
+}
+
+export interface RunLogEntry {
+  level?: string;
+  message: string;
+  timestamp?: string;
+  stepId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+// ─── Artifacts ─────────────────────────────────────────────────────────────
+
+export interface Artifact {
+  id: string;
+  type: string;
+  name?: string;
+  filename?: string;
+  url?: string;
+  previewUrl?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  runId?: string;
+  stepId?: string;
+  labels?: Record<string, string>;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface ListArtifactsResponse {
+  artifacts: Artifact[];
+  /** Number of artifacts in this page (mirrors the platform `count`). */
+  total?: number;
+  count?: number;
+}
+
+// ─── Capabilities ──────────────────────────────────────────────────────────
+
+export type CapabilityStatus = 'draft' | 'published' | 'deprecated';
+
+export interface CapabilityInputField {
+  name: string;
+  type: string;
+  label?: string;
+  description?: string;
+  required?: boolean;
+  default?: unknown;
+  enum?: unknown[];
+  schema?: Record<string, unknown>;
+}
+
+export interface Capability {
+  id: string;
+  slug: string;
+  name: string;
+  description?: string;
+  category?: string;
+  tags?: string[];
+  status: CapabilityStatus;
+  version: string;
+  inputContract?: CapabilityInputField[];
+  /** Legacy/optional flat JSON Schema for inputs. */
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ListCapabilitiesResponse {
+  capabilities: Capability[];
+  total?: number;
+  nextCursor?: string | null;
+}
+
+export interface ListCapabilitiesOptions {
+  status?: CapabilityStatus;
+  category?: string;
+  search?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface RunCapabilityOptions {
+  /** Reuse a previous run if the same key was used before. */
+  idempotencyKey?: string;
+  /** Webhook URL called when the run completes. */
+  webhookUrl?: string;
+  /** Provider/model routing overrides. */
+  routing?: { provider?: string; model?: string };
+  metadata?: Record<string, string>;
+}
+
+export interface ExecuteCapabilityResponse {
+  run: Run;
+}
+
+export interface DryRunResult {
+  valid: boolean;
+  status?: 'valid' | 'warning' | 'error' | string;
+  resolvedInputs?: Record<string, unknown>;
+  resolvedArtifacts?: Record<string, unknown>;
+  estimatedCost?: number;
+  warnings?: unknown[];
+  errors?: unknown[];
+}
+
+// ─── Triggers ──────────────────────────────────────────────────────────────
+
+export interface Trigger {
+  id: string;
+  appId?: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  eventType: string;
+  filters?: Record<string, unknown>;
+  actionType: string;
+  actionConfig?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ListTriggersResponse {
+  triggers: Trigger[];
+  count: number;
+}
+
+export interface ListTriggersOptions {
+  appId?: string;
+  enabled?: boolean;
+}
+
+export interface CreateTriggerInput {
+  name: string;
+  eventType: string;
+  actionType: string;
+  actionConfig: Record<string, unknown>;
+  description?: string;
+  filters?: Record<string, unknown>;
+  enabled?: boolean;
+}
+
+export type UpdateTriggerInput = Partial<Omit<CreateTriggerInput, 'name'>> & {
+  name?: string;
+};
+
+export interface TriggerTestResult {
+  success: boolean;
+  [key: string]: unknown;
+}
+
+// ─── Polling ───────────────────────────────────────────────────────────────
+
+export interface PollOptions {
+  /** Polling interval in ms. Default: 2000 */
+  interval?: number;
+  /** Overall timeout in ms. Default: 600_000 (10 min) */
+  timeout?: number;
+  onUpdate?: (run: Run) => void;
+}
+
+// ─── Health / status ───────────────────────────────────────────────────────
+
+export interface HealthResponse {
+  status: string;
+  timestamp: string;
+  uptime?: number;
+  version?: string;
+  checks?: Record<string, unknown>;
+}
+
+export interface StatusResponse {
+  status: string;
+  version: string;
+  timestamp: string;
+}
