@@ -100,6 +100,15 @@ export interface PresentedAction {
 export interface RunPresentation {
   contractVersion: 1;
   source: 'declared' | 'inferred' | 'none';
+  /**
+   * The run's customer-facing name, taken verbatim from the capability's
+   * `name`.
+   *
+   * ABSENT when the run has no capability. A workflow-only run has no human
+   * name anywhere, and formatting `workflowSlug` would substitute a guess for a
+   * fact — fall back to the slug instead.
+   */
+  title?: string;
   primary: PresentedOutput | null;
   secondary: PresentedOutput[];
   /** Outputs declared role=debug. Inspection surface only. */
