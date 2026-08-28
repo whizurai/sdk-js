@@ -35,6 +35,88 @@ export const TERMINAL_RUN_STATUSES: readonly RunStatus[] = [
   'cancelled',
 ];
 
+// ── Run presentation ─────────────────────────────────────────────────────────
+
+/**
+ * What a produced value IS. Open on purpose: an unrecognised value must degrade
+ * gracefully rather than break a client, so treat this as a string with known
+ * members, not a closed union.
+ */
+export type SemanticOutputType =
+  | 'text' | 'markdown' | 'object' | 'collection'
+  | 'image' | 'video' | 'audio' | 'file' | 'unknown'
+  | (string & {});
+
+export interface PresentedOutput {
+  /** Stable identity: the capability output's `source`, else the result key. */
+  key: string;
+  label: string;
+  semanticType: SemanticOutputType;
+  /** Inline value for text | markdown | object | collection. */
+  value?: unknown;
+  /** The inline value was clipped at the API boundary. */
+  truncated?: boolean;
+  /** Storage URL for media and files. Not pre-proxied. */
+  href?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  /** Set when a durable artifact backs this output. */
+  artifactId?: string;
+  itemType?: SemanticOutputType;
+  itemCount?: number;
+  items?: PresentedOutput[];
+  /** JSON Schema from the output declaration, when present. */
+  schema?: Record<string, unknown>;
+}
+
+export interface PresentedInput {
+  key: string;
+  label: string;
+  semanticType?: string;
+  value?: unknown;
+  href?: string;
+  mimeType?: string;
+}
+
+export interface PresentedAction {
+  /** copy | download | open | play | view_raw | save_as_asset | reuse | continuation */
+  id: string;
+  label: string;
+  outputKey?: string;
+  primary?: boolean;
+  /** continuation only: the capability that can consume this result. */
+  capabilitySlug?: string;
+}
+
+/**
+ * Derived read model for a run's result. Present only when the platform has the
+ * feature enabled and the run succeeded; never persisted, recomputed per
+ * request from the run's canonical `result` plus its capability's declarations.
+ *
+ * `source` is the honesty field: `declared` means the values came from the
+ * workflow's declared outputs. `inferred` means a compatibility adapter
+ * reconstructed them for a run predating the canonical-result contract.
+ */
+export interface RunPresentation {
+  contractVersion: 1;
+  source: 'declared' | 'inferred' | 'none';
+  /**
+   * The run's customer-facing name, taken verbatim from the capability's
+   * `name`.
+   *
+   * ABSENT when the run has no capability. A workflow-only run has no human
+   * name anywhere, and formatting `workflowSlug` would substitute a guess for a
+   * fact — fall back to the slug instead.
+   */
+  title?: string;
+  primary: PresentedOutput | null;
+  secondary: PresentedOutput[];
+  /** Outputs declared role=debug. Inspection surface only. */
+  debug: PresentedOutput[];
+  inputs: PresentedInput[];
+  actions: PresentedAction[];
+}
+
 export interface Run {
   id: string;
   /** Underlying workflow run ID, when surfaced by the platform. */
@@ -54,6 +136,8 @@ export interface Run {
   startedAt?: string;
   completedAt?: string;
   updatedAt?: string;
+  /** Derived result read model. Absent when the platform has it disabled. */
+  presentation?: RunPresentation;
 }
 
 export interface ListRunsResponse {
