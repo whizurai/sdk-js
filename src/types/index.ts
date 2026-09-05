@@ -319,3 +319,6 @@ export interface StatusResponse {
   version: string;
   timestamp: string;
 }
+
+// Capability-specific typed shapes.
+export * from './video-multi-shot';
