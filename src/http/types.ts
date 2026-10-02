@@ -433,6 +433,9 @@ export interface EmbeddingsRequest {
   
   /** Optional tenant ID for scoping */
   tenantId?: string;
+
+  /** `query` for search queries, `document` for indexed passages (sent as `input_type`). */
+  inputType?: 'query' | 'document';
 }
 
 /**

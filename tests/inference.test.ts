@@ -12,7 +12,10 @@ import {
   assertSameEmbeddingSpace,
   EmbeddingSpaceError,
   RECOMMENDED_EMBEDDING_MODEL,
+  WhizuraiError,
 } from '../src/index';
+import { parseErrorBody } from '../src/http-client';
+import { EmbeddingsClient } from '../src/ai';
 
 jest.mock('axios');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -60,7 +63,63 @@ const DOCS = ['alpha', 'beta', 'gamma'];
 let client: WhizuraiClient;
 beforeEach(() => {
   jest.clearAllMocks();
-  client = new WhizuraiClient({ apiKey: 'sk_test', baseUrl: 'http://localhost:3000' });
+  client = new WhizuraiClient({
+    apiKey: 'sk_test',
+    baseUrl: 'http://localhost:3000',
+    inferenceBaseUrl: 'http://model-router.test',
+  });
+});
+
+describe('inference host', () => {
+  it('sends embed/rerank to inferenceBaseUrl with the API key headers', async () => {
+    mockHttp.post.mockResolvedValueOnce({ data: { object: 'list', data: [], model: 'm' } });
+    await client.embed({ model: 'm', input: 'x' });
+    const created = axios.create.mock.calls.map((c: unknown[]) => c[0] as { baseURL: string; headers: Record<string, string> });
+    const routerClient = created.find((c: { baseURL: string }) => c.baseURL === 'http://model-router.test');
+    expect(routerClient).toBeDefined();
+    expect(routerClient!.headers['X-API-Key']).toBe('sk_test');
+    expect(routerClient!.headers.Authorization).toBe('Bearer sk_test');
+  });
+
+  it('throws INFERENCE_BASE_URL_REQUIRED when unset, even with fallback', async () => {
+    const noRouter = new WhizuraiClient({ apiKey: 'sk_test', baseUrl: 'http://localhost:3000' });
+    await expect(noRouter.embed({ model: 'm', input: 'x' })).rejects.toMatchObject({
+      code: 'INFERENCE_BASE_URL_REQUIRED',
+    });
+    await expect(
+      noRouter.rerank({ model: 'm', query: 'q', documents: DOCS }, { fallback: 'original-order' })
+    ).rejects.toMatchObject({ code: 'INFERENCE_BASE_URL_REQUIRED' });
+    expect(mockHttp.post).not.toHaveBeenCalled();
+  });
+
+  it.each([401, 404])('a %i still throws in fallback mode and names inferenceBaseUrl', async (status) => {
+    mockHttp.post.mockImplementationOnce(() => httpError(status, { detail: 'Not Found' }));
+    const err = await client
+      .rerank({ model: 'm', query: 'q', documents: DOCS }, { fallback: 'original-order' })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(WhizuraiError);
+    expect(err.status).toBe(status);
+    expect(err.message).toMatch(/check inferenceBaseUrl: http:\/\/model-router\.test/);
+  });
+});
+
+describe('error body parsing', () => {
+  it.each([
+    [{ error: { code: 'no_worker_claimed', message: 'no worker' } }, 'no worker', 'no_worker_claimed'],
+    [{ detail: { error: 'no_worker_claimed', message: 'no worker' } }, 'no worker', 'no_worker_claimed'],
+    [{ detail: 'Model not allowed' }, 'Model not allowed', undefined],
+    [{ detail: [{ loc: ['body', 'documents'], msg: 'too long' }] }, 'body.documents: too long', undefined],
+    [{ error: 'invalid_request', message: 'bad' }, 'bad', 'invalid_request'],
+    [{ message: 'plain', code: 'X' }, 'plain', 'X'],
+  ])('parses %j', (body, message, code) => {
+    expect(parseErrorBody(body)).toEqual({ message, code });
+  });
+
+  it('keeps the server message from a FastAPI detail on a 503', async () => {
+    await expect(
+      httpError(503, { detail: { error: 'no_worker_claimed', message: 'no rerank worker' } })
+    ).rejects.toMatchObject({ status: 503, code: 'no_worker_claimed', message: 'no rerank worker' });
+  });
 });
 
 describe('client.embed', () => {
@@ -98,7 +157,7 @@ describe('client.embed', () => {
       input: ['hello'],
       input_type: 'query',
       instruction: 'find events',
-    });
+    }, undefined);
     expect(res.whizai?.embedding_space).toBe(SPACE);
     expect(res.whizai?.model_revision).toBe('97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3');
     expect(res.whizai?.worker?.name).toBe('spark02');
@@ -233,5 +292,22 @@ describe('assertSameEmbeddingSpace', () => {
   ])('throws when either side is %s', (_label, bad) => {
     expect(() => assertSameEmbeddingSpace(SPACE, bad as never)).toThrow(EmbeddingSpaceError);
     expect(() => assertSameEmbeddingSpace(bad as never, SPACE)).toThrow(EmbeddingSpaceError);
+  });
+});
+
+describe('legacy EmbeddingsClient', () => {
+  it('requires a model (no text-embedding-3-small default)', async () => {
+    const legacy = new EmbeddingsClient({ vectorSearchUrl: 'http://vs.test' });
+    await expect(legacy.embed({ text: 'x' })).rejects.toThrow(/requires a model/);
+  });
+
+  it('search() embeds the query with input_type "query"', async () => {
+    const legacy = new EmbeddingsClient({ vectorSearchUrl: 'http://vs.test', defaultModel: 'embedding-qwen3-0.6b-v1' });
+    mockHttp.post
+      .mockResolvedValueOnce({ data: { data: [{ embedding: [1, 0] }], model: 'm', whizai: { embedding_space: SPACE } } })
+      .mockResolvedValueOnce({ data: { results: [] } });
+    await legacy.search({ query: 'tacos', collection: 'c' });
+    expect(mockHttp.post.mock.calls[0][0]).toBe('/v1/embeddings');
+    expect(mockHttp.post.mock.calls[0][1]).toMatchObject({ text: 'tacos', model: 'embedding-qwen3-0.6b-v1', input_type: 'query' });
   });
 });

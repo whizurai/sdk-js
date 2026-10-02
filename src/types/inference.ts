@@ -57,14 +57,16 @@ export interface InferenceProvenance {
   runtime?: string;
   /** Where it executed (e.g. `local`, `cloud`). */
   execution?: string;
-  /** Worker identity, when known. */
-  worker?: InferenceWorker;
+  /** Worker identity, or `null`/absent when not attributable. */
+  worker?: InferenceWorker | null;
   /** Resolved model id (the alias target, not the alias). */
   model?: string;
   /** Exact model revision, or `null` when the runtime cannot report one. */
   model_revision?: string | null;
   /** Prompt/instruction contract the server applied (e.g. `qwen3-embed-instruct-v1`). */
   prompt_contract?: string;
+  /** `false` when the gateway could not establish which worker/model served the request. */
+  attributable?: boolean;
 }
 
 // =============================================================================
@@ -106,15 +108,13 @@ export interface EmbeddingProvenance extends InferenceProvenance {
    * identical. Absent on older, non-fleet models.
    */
   embedding_space?: string;
-  /** `false` when the gateway could not establish which worker/model served the request. */
-  attributable?: boolean;
 }
 
 export interface EmbeddingsResponse {
   object: 'list';
   data: EmbeddingData[];
   model: string;
-  usage?: InferenceUsage;
+  usage?: InferenceUsage | null;
   whizai?: EmbeddingProvenance;
 }
 
@@ -140,6 +140,7 @@ export interface RerankResult {
   relevance_score: number;
 }
 
+/** Rerank provenance (includes `attributable`). */
 export type RerankProvenance = InferenceProvenance;
 
 export interface RerankResponse {
@@ -147,7 +148,7 @@ export interface RerankResponse {
   model: string;
   /** Sorted by `relevance_score`, descending. */
   results: RerankResult[];
-  usage?: InferenceUsage;
+  usage?: InferenceUsage | null;
   whizai?: RerankProvenance;
 }
 
@@ -160,7 +161,12 @@ export interface EmbedParams {
   /** Model id or pinned alias (e.g. `embedding-qwen3-0.6b-v1`). Required — no default. */
   model: string;
   input: string | string[];
-  /** Default `document` (server-side). */
+  /**
+   * `query` for retrieval queries, `document` (server default) for passages
+   * being indexed. Instruction-tuned models (Qwen3-Embedding) only apply the
+   * query instruction to `query` inputs — embedding a query as a document
+   * silently degrades retrieval.
+   */
   inputType?: EmbeddingInputType;
   instruction?: string;
 }

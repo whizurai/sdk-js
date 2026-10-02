@@ -51,7 +51,9 @@ export class WhizuraiClient {
 
   private readonly _http: AxiosInstance;
   private readonly _inference: InferenceResource;
-  private readonly _config: Required<WhizuraiConfig>;
+  private readonly _config: Required<Omit<WhizuraiConfig, 'inferenceBaseUrl'>> & {
+    inferenceBaseUrl?: string;
+  };
 
   constructor(config: WhizuraiConfig) {
     if (!config?.apiKey) {
@@ -61,6 +63,7 @@ export class WhizuraiClient {
       apiKey: config.apiKey,
       baseUrl: config.baseUrl || DEFAULT_BASE_URL,
       timeout: config.timeout ?? 30_000,
+      inferenceBaseUrl: config.inferenceBaseUrl || undefined,
     };
 
     this._http = createHttpClient(this._config);
@@ -68,11 +71,11 @@ export class WhizuraiClient {
     this.runs = new RunsResource(this._http);
     this.artifacts = new ArtifactsResource(this._http);
     this.triggers = new TriggersResource(this._http);
-    this._inference = new InferenceResource(this._http);
+    this._inference = new InferenceResource(this._config);
   }
 
   /**
-   * Embed text (`POST /v1/embeddings`). `model` is required — there is no
+   * Embed text (`POST /v1/embeddings` on model-router — needs `inferenceBaseUrl`). `model` is required — there is no
    * default, so the vector space is always a deliberate choice. The response
    * carries `whizai.embedding_space`; compare vectors only within one space
    * (see {@link assertSameEmbeddingSpace}).
@@ -82,7 +85,7 @@ export class WhizuraiClient {
   }
 
   /**
-   * Rerank documents against a query (`POST /v1/rerank`).
+   * Rerank documents against a query (`POST /v1/rerank` on model-router — needs `inferenceBaseUrl`).
    *
    * With `{ fallback: 'original-order' }` this never throws on timeout,
    * network error, 408/429 or 5xx: it resolves with `degraded: true` and the

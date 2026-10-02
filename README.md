@@ -301,10 +301,28 @@ Direct inference against `POST /v1/embeddings` and `POST /v1/rerank`.
 Responses keep their wire shape (snake_case), including the optional `whizai`
 provenance block.
 
+These endpoints are served by **model-router**, not the api-gateway at
+`baseUrl`, so set `inferenceBaseUrl`. The same `apiKey` authenticates there
+(sent as `X-API-Key` and `Authorization: Bearer`; model-router verifies it with
+the gateway). Without `inferenceBaseUrl`, `embed()`/`rerank()` throw
+`WhizuraiError` with code `INFERENCE_BASE_URL_REQUIRED`.
+
+```typescript
+const client = new WhizuraiClient({
+  apiKey: process.env.WHIZURAI_API_KEY!,
+  inferenceBaseUrl: 'https://model-router.staging.whizur.ai',
+});
+```
+
 ### Embed
 
 `model` is **required** — there is no default, because the model fixes the
 vector space. Use a pinned alias such as `embedding-qwen3-0.6b-v1`.
+
+**Set `inputType` correctly.** Retrieval queries must pass `inputType: 'query'`;
+passages being indexed use `'document'` (the default). Qwen3-Embedding applies
+its retrieval instruction only to query inputs — a query embedded as a document
+gets no instruction and retrieves worse, with no error.
 
 ```typescript
 const res = await client.embed({
@@ -369,14 +387,23 @@ if (out.degraded) {
 ```
 
 Validation and auth errors (400, 401, 403, 404, 422) **always throw**, even in
-fallback mode — they are caller bugs, not outages.
+fallback mode — they are caller bugs, not outages. A 401/403/404 message ends
+with `(check inferenceBaseUrl: …)`, since pointing the client at the wrong host
+(e.g. the gateway) produces exactly those. A missing `inferenceBaseUrl` also
+throws in fallback mode.
+
+Error messages are taken from any body shape the platform returns:
+`{error: {code, message}}`, `{error, message}`, or FastAPI's `{detail: …}`
+(string, `{error, message}` object, or validation list).
 
 ### Legacy `EmbeddingsClient`
 
 The standalone `EmbeddingsClient` (`src/ai`) no longer defaults to
 `text-embedding-3-small`. Pass `model` per request or set `defaultModel`
 explicitly; otherwise `embed()` throws. Its response now carries `whizai` and
-`embeddingSpace` when the server returns them.
+`embeddingSpace` when the server returns them. `search()` embeds a text query
+with `input_type: 'query'`; pass `inputType` on `embed()` yourself otherwise.
+This is the breaking change behind 3.0.0 — see [CHANGELOG.md](./CHANGELOG.md).
 
 ## Error Handling
 

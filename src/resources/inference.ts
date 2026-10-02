@@ -1,13 +1,19 @@
 /**
  * Direct inference — `POST /v1/embeddings` and `POST /v1/rerank`.
  *
+ * These are served by model-router, not the api-gateway at `baseUrl`, so they
+ * use their own HTTP client bound to `inferenceBaseUrl`. model-router accepts
+ * the same WhizAI API key (`X-API-Key` or `Authorization: Bearer`), which it
+ * verifies with the gateway.
+ *
  * Exposed as `client.embed()` / `client.rerank()`. Responses are returned in
  * their wire shape (snake_case), including the optional `whizai` provenance
  * block, so they line up with `@whizurai/types/inference`.
  */
 
 import { AxiosInstance } from 'axios';
-import { ValidationError, WhizuraiError } from '../errors';
+import { errorForStatus, ValidationError, WhizuraiError } from '../errors';
+import { createHttpClient } from '../http-client';
 import {
   DegradedRerankResponse,
   EmbedParams,
@@ -52,8 +58,59 @@ export function rerankDegradeReason(error: unknown): string | null {
   return 'network_error';
 }
 
+export interface InferenceResourceConfig {
+  apiKey: string;
+  timeout: number;
+  inferenceBaseUrl?: string;
+}
+
 export class InferenceResource {
-  constructor(private readonly http: AxiosInstance) {}
+  private _http?: AxiosInstance;
+
+  constructor(private readonly config: InferenceResourceConfig) {}
+
+  /** The model-router HTTP client; throws if `inferenceBaseUrl` is not configured. */
+  private http(): AxiosInstance {
+    if (this._http) return this._http;
+    const baseUrl = this.config.inferenceBaseUrl;
+    if (!baseUrl) {
+      throw new WhizuraiError(
+        'embed()/rerank() require `inferenceBaseUrl` (the model-router URL, e.g. ' +
+          "'https://model-router.staging.whizur.ai'). The gateway `baseUrl` does not serve " +
+          '/v1/embeddings or /v1/rerank.',
+        'INFERENCE_BASE_URL_REQUIRED'
+      );
+    }
+    this._http = createHttpClient({ apiKey: this.config.apiKey, baseUrl, timeout: this.config.timeout });
+    return this._http;
+  }
+
+  /**
+   * 401/403/404 from model-router usually mean the client points at the wrong
+   * host (e.g. the gateway). Say so, keeping the error class and status.
+   */
+  private withConfigHint(error: unknown): unknown {
+    const e = error as WhizuraiError;
+    if (e instanceof WhizuraiError && (e.status === 401 || e.status === 403 || e.status === 404)) {
+      return errorForStatus(
+        e.status,
+        `${e.message} (check inferenceBaseUrl: ${this.config.inferenceBaseUrl})`,
+        e.code,
+        e.details
+      );
+    }
+    return error;
+  }
+
+  private async post(path: string, body: unknown, config?: { timeout: number }): Promise<unknown> {
+    const http = this.http();
+    try {
+      const res = await http.post(path, body, config);
+      return res.data;
+    } catch (error) {
+      throw this.withConfigHint(error);
+    }
+  }
 
   /** Embed one or many strings. `model` is required. */
   async embed(params: EmbedParams): Promise<EmbeddingsResponse> {
@@ -64,8 +121,7 @@ export class InferenceResource {
     if (params.inputType) body.input_type = params.inputType;
     if (params.instruction) body.instruction = params.instruction;
 
-    const res = await this.http.post('/v1/embeddings', body);
-    return res.data as EmbeddingsResponse;
+    return (await this.post('/v1/embeddings', body)) as EmbeddingsResponse;
   }
 
   /** Rerank `documents` against `query`. See {@link RerankCallOptions} for fallback mode. */
@@ -79,10 +135,11 @@ export class InferenceResource {
     if (params.instruction) body.instruction = params.instruction;
 
     const config = options.timeoutMs !== undefined ? { timeout: options.timeoutMs } : undefined;
+    // Resolve the client first: a missing inferenceBaseUrl is a config bug and always throws.
+    this.http();
 
     try {
-      const res = await this.http.post('/v1/rerank', body, config);
-      const data = res.data as RerankResponse;
+      const data = (await this.post('/v1/rerank', body, config)) as RerankResponse;
       return { ...data, degraded: false } as RankedRerankResponse;
     } catch (error) {
       if (options.fallback !== 'original-order') throw error;

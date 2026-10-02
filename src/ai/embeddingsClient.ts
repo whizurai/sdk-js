@@ -69,6 +69,7 @@ export class EmbeddingsClient {
         text: request.text,
         model,
         tenant_id: request.tenantId,
+        ...(request.inputType && { input_type: request.inputType }),
       });
 
       const data = response.data;
@@ -110,8 +111,11 @@ export class EmbeddingsClient {
       let queryVector: number[];
       
       if (typeof request.query === 'string') {
+        // A search query must be embedded as a query: instruction-tuned models
+        // apply their retrieval instruction only to input_type "query".
         const embedRequest: any = {
           text: request.query,
+          inputType: 'query',
         };
         if (request.model !== undefined) {
           embedRequest.model = request.model;
