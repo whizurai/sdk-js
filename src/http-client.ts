@@ -5,10 +5,10 @@
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import { WhizuraiConfig } from './types';
-import { errorForStatus } from './errors';
+import { errorForStatus, TimeoutError } from './errors';
 
 export const DEFAULT_BASE_URL = 'https://api.whizurai.com';
-export const SDK_VERSION = '2.0.0';
+export const SDK_VERSION = '2.1.0';
 
 export function createHttpClient(config: Required<WhizuraiConfig>): AxiosInstance {
   const baseURL = config.baseUrl.replace(/\/$/, '');
@@ -30,6 +30,9 @@ export function createHttpClient(config: Required<WhizuraiConfig>): AxiosInstanc
     (response) => response,
     (error: AxiosError) => {
       const status = error.response?.status;
+      if (!error.response && (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT')) {
+        return Promise.reject(new TimeoutError(error.message || 'Request timed out'));
+      }
       const data = error.response?.data as
         | { error?: { message?: string; code?: string } | string; message?: string; code?: string }
         | undefined;

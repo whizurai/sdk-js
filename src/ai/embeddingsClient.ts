@@ -20,7 +20,11 @@ export interface EmbeddingsClientConfig {
   /** Request timeout in milliseconds */
   timeout?: number;
   
-  /** Default embedding model */
+  /**
+   * Embedding model used when a request names none. There is deliberately no
+   * built-in default: the model fixes the vector space, so it must be chosen
+   * explicitly (e.g. `embedding-qwen3-0.6b-v1`).
+   */
   defaultModel?: string;
 }
 
@@ -31,12 +35,10 @@ export class EmbeddingsClient {
   private client: AxiosInstance;
   private config: EmbeddingsClientConfig;
   private readonly DEFAULT_TIMEOUT = 30000;
-  private readonly DEFAULT_MODEL = 'text-embedding-3-small';
 
   constructor(config: EmbeddingsClientConfig) {
     this.config = {
       timeout: this.DEFAULT_TIMEOUT,
-      defaultModel: this.DEFAULT_MODEL,
       ...config,
     };
 
@@ -54,7 +56,13 @@ export class EmbeddingsClient {
    * Generate embeddings for text
    */
   async embed(request: EmbeddingsRequest): Promise<EmbeddingsResponse> {
-    const model = request.model || this.config.defaultModel || this.DEFAULT_MODEL;
+    const model = request.model || this.config.defaultModel;
+    if (!model) {
+      throw new Error(
+        'EmbeddingsClient.embed requires a model (request.model or config.defaultModel); ' +
+          'there is no default because the model fixes the vector space.'
+      );
+    }
 
     try {
       const response = await this.client.post('/v1/embeddings', {
@@ -72,6 +80,8 @@ export class EmbeddingsClient {
           dimensions: data.data[0].embedding.length,
           model: data.model || model,
           tokensUsed: data.usage?.total_tokens,
+          ...(data.whizai && { whizai: data.whizai }),
+          ...(data.whizai?.embedding_space && { embeddingSpace: data.whizai.embedding_space }),
         };
       }
 
@@ -103,6 +113,9 @@ export class EmbeddingsClient {
         const embedRequest: any = {
           text: request.query,
         };
+        if (request.model !== undefined) {
+          embedRequest.model = request.model;
+        }
         if (request.tenantId !== undefined) {
           embedRequest.tenantId = request.tenantId;
         }

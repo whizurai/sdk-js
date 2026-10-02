@@ -428,7 +428,7 @@ export interface EmbeddingsRequest {
   /** Text to embed */
   text: string;
   
-  /** Model to use (e.g., "text-embedding-3-small") */
+  /** Model to use (e.g., "embedding-qwen3-0.6b-v1"). Falls back to the client's `defaultModel`; there is no built-in default. */
   model?: string;
   
   /** Optional tenant ID for scoping */
@@ -450,6 +450,12 @@ export interface EmbeddingsResponse {
   
   /** Token usage */
   tokensUsed?: number;
+
+  /** Vector-space identity (`whizai.embedding_space`), when the platform reports it. */
+  embeddingSpace?: string;
+
+  /** Raw provenance block from the platform, when present. */
+  whizai?: import('../types/inference').EmbeddingProvenance;
 }
 
 /**
@@ -458,6 +464,9 @@ export interface EmbeddingsResponse {
 export interface VectorSearchRequest {
   /** Query embedding or text */
   query: number[] | string;
+
+  /** Embedding model for a text query (falls back to the client's `defaultModel`). */
+  model?: string;
   
   /** Collection name */
   collection: string;

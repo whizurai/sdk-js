@@ -322,3 +322,4 @@ export interface StatusResponse {
 
 // Capability-specific typed shapes.
 export * from './video-multi-shot';
+export * from './inference';
