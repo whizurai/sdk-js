@@ -295,6 +295,116 @@ processImage().catch(console.error);
 > instead — capabilities wrap those primitives with validation, routing, and
 > artifact tracking.
 
+## Embeddings and Rerank
+
+Direct inference against `POST /v1/embeddings` and `POST /v1/rerank`.
+Responses keep their wire shape (snake_case), including the optional `whizai`
+provenance block.
+
+These endpoints are served by **model-router**, not the api-gateway at
+`baseUrl`, so set `inferenceBaseUrl`. The same `apiKey` authenticates there
+(sent as `X-API-Key` and `Authorization: Bearer`; model-router verifies it with
+the gateway). Without `inferenceBaseUrl`, `embed()`/`rerank()` throw
+`WhizuraiError` with code `INFERENCE_BASE_URL_REQUIRED`.
+
+```typescript
+const client = new WhizuraiClient({
+  apiKey: process.env.WHIZURAI_API_KEY!,
+  inferenceBaseUrl: 'https://model-router.staging.whizur.ai',
+});
+```
+
+### Embed
+
+`model` is **required** — there is no default, because the model fixes the
+vector space. Use a pinned alias such as `embedding-qwen3-0.6b-v1`.
+
+**Set `inputType` correctly.** Retrieval queries must pass `inputType: 'query'`;
+passages being indexed use `'document'` (the default). Qwen3-Embedding applies
+its retrieval instruction only to query inputs — a query embedded as a document
+gets no instruction and retrieves worse, with no error.
+
+```typescript
+const res = await client.embed({
+  model: 'embedding-qwen3-0.6b-v1',
+  input: ['late night tacos', 'jazz brunch'], // string or up to 128 strings
+  inputType: 'document',                    // or 'query' (default 'document')
+  instruction: 'Represent the listing for retrieval', // optional
+});
+
+res.data[0].embedding;          // number[]
+res.whizai?.embedding_space;    // 'qwen3-embedding-0.6b:<rev>:1024:normalized:qwen3-embed-instruct-v1'
+res.whizai?.model_revision;     // string | null
+res.whizai?.worker;             // { id, name } when attributable
+```
+
+**Never compare vectors across `embedding_space` values.** Store the space next
+to every vector, and check it before computing similarity:
+
+```typescript
+import { assertSameEmbeddingSpace } from '@whizurai/sdk-js';
+
+// Throws EmbeddingSpaceError if the spaces differ, or if either is missing
+// or contains 'unknown'. Accepts strings, provenance blocks or responses.
+assertSameEmbeddingSpace(storedSpace, queryRes);
+```
+
+Older non-fleet models (e.g. `nomic-embed-text`) return no `embedding_space`;
+the guard treats that as non-comparable, not as a wildcard.
+
+### Rerank
+
+```typescript
+const ranked = await client.rerank({
+  model: 'rerank-qwen3-0.6b-v1',
+  query: 'live music tonight',
+  documents: ['doc a', 'doc b', 'doc c'], // 1..64
+  topN: 2,
+});
+ranked.results; // [{ index, relevance_score }] sorted by score, descending
+```
+
+Without options, `rerank()` throws on any failure (the platform fails fast
+with 503/504 when no worker is available or the call times out).
+
+### Rerank fallback mode
+
+A reranker should never be a correctness dependency. With
+`fallback: 'original-order'`, a timeout, network error, 408, 429 or 5xx resolves
+instead of throwing:
+
+```typescript
+const out = await client.rerank(
+  { model: 'rerank-qwen3-0.6b-v1', query, documents },
+  { fallback: 'original-order', timeoutMs: 1500 }
+);
+
+if (out.degraded) {
+  // out.results: [{ index: 0, relevance_score: null }, { index: 1, ... }, ...]
+  // (original order, truncated to topN when given)
+  log.warn('rerank degraded', out.reason, out.error); // reason: 'timeout' | 'network_error' | 'http_503' | ...
+}
+```
+
+Validation and auth errors (400, 401, 403, 404, 422) **always throw**, even in
+fallback mode — they are caller bugs, not outages. A 401/403/404 message ends
+with `(check inferenceBaseUrl: …)`, since pointing the client at the wrong host
+(e.g. the gateway) produces exactly those. A missing `inferenceBaseUrl` also
+throws in fallback mode.
+
+Error messages are taken from any body shape the platform returns:
+`{error: {code, message}}`, `{error, message}`, or FastAPI's `{detail: …}`
+(string, `{error, message}` object, or validation list).
+
+### Legacy `EmbeddingsClient`
+
+The standalone `EmbeddingsClient` (`src/ai`) no longer defaults to
+`text-embedding-3-small`. Pass `model` per request or set `defaultModel`
+explicitly; otherwise `embed()` throws. Its response now carries `whizai` and
+`embeddingSpace` when the server returns them. `search()` embeds a text query
+with `input_type: 'query'`; pass `inputType` on `embed()` yourself otherwise.
+This is the breaking change behind 3.0.0 — see [CHANGELOG.md](./CHANGELOG.md).
+
 ## Error Handling
 
 The SDK throws typed errors for different scenarios. All extend `WhizuraiError`,

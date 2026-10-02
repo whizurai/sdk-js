@@ -26,7 +26,18 @@ import { CapabilitiesResource } from './resources/capabilities';
 import { RunsResource } from './resources/runs';
 import { ArtifactsResource } from './resources/artifacts';
 import { TriggersResource } from './resources/triggers';
-import { HealthResponse, StatusResponse, WhizuraiConfig } from './types';
+import { InferenceResource } from './resources/inference';
+import {
+  EmbedParams,
+  EmbeddingsResponse,
+  HealthResponse,
+  RankedRerankResponse,
+  RerankCallOptions,
+  RerankOutcome,
+  RerankParams,
+  StatusResponse,
+  WhizuraiConfig,
+} from './types';
 
 export class WhizuraiClient {
   /** Execute and inspect capabilities. */
@@ -39,7 +50,10 @@ export class WhizuraiClient {
   readonly triggers: TriggersResource;
 
   private readonly _http: AxiosInstance;
-  private readonly _config: Required<WhizuraiConfig>;
+  private readonly _inference: InferenceResource;
+  private readonly _config: Required<Omit<WhizuraiConfig, 'inferenceBaseUrl'>> & {
+    inferenceBaseUrl?: string;
+  };
 
   constructor(config: WhizuraiConfig) {
     if (!config?.apiKey) {
@@ -49,6 +63,7 @@ export class WhizuraiClient {
       apiKey: config.apiKey,
       baseUrl: config.baseUrl || DEFAULT_BASE_URL,
       timeout: config.timeout ?? 30_000,
+      inferenceBaseUrl: config.inferenceBaseUrl || undefined,
     };
 
     this._http = createHttpClient(this._config);
@@ -56,6 +71,31 @@ export class WhizuraiClient {
     this.runs = new RunsResource(this._http);
     this.artifacts = new ArtifactsResource(this._http);
     this.triggers = new TriggersResource(this._http);
+    this._inference = new InferenceResource(this._config);
+  }
+
+  /**
+   * Embed text (`POST /v1/embeddings` on model-router — needs `inferenceBaseUrl`). `model` is required — there is no
+   * default, so the vector space is always a deliberate choice. The response
+   * carries `whizai.embedding_space`; compare vectors only within one space
+   * (see {@link assertSameEmbeddingSpace}).
+   */
+  embed(params: EmbedParams): Promise<EmbeddingsResponse> {
+    return this._inference.embed(params);
+  }
+
+  /**
+   * Rerank documents against a query (`POST /v1/rerank` on model-router — needs `inferenceBaseUrl`).
+   *
+   * With `{ fallback: 'original-order' }` this never throws on timeout,
+   * network error, 408/429 or 5xx: it resolves with `degraded: true` and the
+   * documents in their original order. Other 4xx errors always throw.
+   */
+  rerank(params: RerankParams, options: RerankCallOptions & { fallback: 'original-order' }): Promise<RerankOutcome>;
+  rerank(params: RerankParams, options?: RerankCallOptions & { fallback?: undefined }): Promise<RankedRerankResponse>;
+  rerank(params: RerankParams, options?: RerankCallOptions): Promise<RerankOutcome>;
+  rerank(params: RerankParams, options: RerankCallOptions = {}): Promise<RerankOutcome> {
+    return this._inference.rerank(params, options);
   }
 
   /** Unauthenticated gateway health check (`GET /health`). */
@@ -87,6 +127,21 @@ export type { ListRunsOptions } from './resources/runs';
 export { ArtifactsResource } from './resources/artifacts';
 export type { ListArtifactsOptions } from './resources/artifacts';
 export { TriggersResource } from './resources/triggers';
+export { InferenceResource, rerankDegradeReason } from './resources/inference';
+
+// Embedding-space guard.
+export {
+  assertSameEmbeddingSpace,
+  embeddingSpaceOf,
+  EmbeddingSpaceError,
+} from './embedding-space';
+export type { EmbeddingSpaceSource } from './embedding-space';
+export {
+  RECOMMENDED_EMBEDDING_MODEL,
+  RECOMMENDED_RERANK_MODEL,
+  EMBEDDINGS_MAX_INPUTS,
+  RERANK_MAX_DOCUMENTS,
+} from './types/inference';
 
 // Errors.
 export * from './errors';

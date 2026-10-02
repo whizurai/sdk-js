@@ -15,6 +15,13 @@ export interface WhizuraiConfig {
   baseUrl?: string;
   /** Per-request timeout in ms. Default: 30_000 */
   timeout?: number;
+  /**
+   * Base URL of model-router, which serves `POST /v1/embeddings` and
+   * `POST /v1/rerank` (e.g. `https://model-router.staging.whizur.ai`). The
+   * gateway at `baseUrl` does not serve them. Required for `embed()` /
+   * `rerank()`; authenticated with the same `apiKey`.
+   */
+  inferenceBaseUrl?: string;
 }
 
 // ─── Run lifecycle ─────────────────────────────────────────────────────────
@@ -322,3 +329,4 @@ export interface StatusResponse {
 
 // Capability-specific typed shapes.
 export * from './video-multi-shot';
+export * from './inference';
