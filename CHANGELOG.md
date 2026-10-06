@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.1.0 (unreleased)
+
+### Added
+
+- `client.chat(params, options?)` for model-router's OpenAI-compatible
+  `POST /v1/chat/completions` (needs `inferenceBaseUrl`): required `model`
+  (capability alias such as `structured-extraction`), `responseFormat`
+  including `json_schema`, `reasoningEffort` / `chatTemplateKwargs`, tools, and
+  `execution` attribution typed on the response. `executionPolicy` / `priority`
+  options are sent as `x-execution-policy` / `x-priority`.
+- Types: `ChatParams`, `ChatCallOptions`, `ChatMessage`, `ChatCompletionRequest`,
+  `ChatCompletionResponse`, `ChatExecution`, `ChatResolution`,
+  `ChatResponseFormat`, `ExecutionPolicy`; constant `STRUCTURED_EXTRACTION_MODEL`.
+
+### Fixed
+
+- CI: `pnpm lint` had failed on every run because `eslint` was never a
+  devDependency. Added ESLint 9 + typescript-eslint (flat config). CI and
+  publish now run on the `arc-whizurai` self-hosted runners with
+  `--frozen-lockfile`; publish is gated on lint/typecheck/test.
+
 ## 3.0.0 (unreleased)
 
 ### Breaking

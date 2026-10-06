@@ -1,12 +1,13 @@
 /**
- * Direct inference — `POST /v1/embeddings` and `POST /v1/rerank`.
+ * Direct inference — `POST /v1/embeddings`, `POST /v1/rerank` and
+ * `POST /v1/chat/completions`.
  *
  * These are served by model-router, not the api-gateway at `baseUrl`, so they
  * use their own HTTP client bound to `inferenceBaseUrl`. model-router accepts
  * the same WhizAI API key (`X-API-Key` or `Authorization: Bearer`), which it
  * verifies with the gateway.
  *
- * Exposed as `client.embed()` / `client.rerank()`. Responses are returned in
+ * Exposed as `client.embed()` / `client.rerank()` / `client.chat()`. Responses are returned in
  * their wire shape (snake_case), including the optional `whizai` provenance
  * block, so they line up with `@whizurai/types/inference`.
  */
@@ -15,6 +16,10 @@ import { AxiosInstance } from 'axios';
 import { errorForStatus, ValidationError, WhizuraiError } from '../errors';
 import { createHttpClient } from '../http-client';
 import {
+  ChatCallOptions,
+  ChatCompletionRequest,
+  ChatCompletionResponse,
+  ChatParams,
   DegradedRerankResponse,
   EmbedParams,
   EmbeddingsRequest,
@@ -27,11 +32,15 @@ import {
   RerankResponse,
 } from '../types';
 
-function requireModel(model: unknown, method: string): string {
+function requireModel(
+  model: unknown,
+  method: string,
+  example = 'embedding-qwen3-0.6b-v1',
+  why = 'the vector space must be a deliberate choice'
+): string {
   if (typeof model !== 'string' || model.trim() === '') {
     throw new ValidationError(
-      `${method} requires an explicit \`model\` (e.g. 'embedding-qwen3-0.6b-v1'). ` +
-        'There is no default: the vector space must be a deliberate choice.',
+      `${method} requires an explicit \`model\` (e.g. '${example}'). ` + `There is no default: ${why}.`,
       'MODEL_REQUIRED'
     );
   }
@@ -75,9 +84,9 @@ export class InferenceResource {
     const baseUrl = this.config.inferenceBaseUrl;
     if (!baseUrl) {
       throw new WhizuraiError(
-        'embed()/rerank() require `inferenceBaseUrl` (the model-router URL, e.g. ' +
+        'embed()/rerank()/chat() require `inferenceBaseUrl` (the model-router URL, e.g. ' +
           "'https://model-router.staging.whizur.ai'). The gateway `baseUrl` does not serve " +
-          '/v1/embeddings or /v1/rerank.',
+          '/v1/embeddings, /v1/rerank or /v1/chat/completions.',
         'INFERENCE_BASE_URL_REQUIRED'
       );
     }
@@ -102,7 +111,11 @@ export class InferenceResource {
     return error;
   }
 
-  private async post(path: string, body: unknown, config?: { timeout: number }): Promise<unknown> {
+  private async post(
+    path: string,
+    body: unknown,
+    config?: { timeout?: number; headers?: Record<string, string> }
+  ): Promise<unknown> {
     const http = this.http();
     try {
       const res = await http.post(path, body, config);
@@ -160,5 +173,53 @@ export class InferenceResource {
       };
       return degraded;
     }
+  }
+
+  /**
+   * OpenAI-compatible chat completion. `model` is required: name a capability
+   * alias (e.g. `structured-extraction`) rather than a concrete model id.
+   * Non-streaming only. Attribution is in `execution` (absent = unattributed).
+   */
+  async chat(params: ChatParams, options: ChatCallOptions = {}): Promise<ChatCompletionResponse> {
+    const model = requireModel(
+      params?.model,
+      'chat()',
+      'structured-extraction',
+      'name the capability alias you need'
+    );
+    if (!Array.isArray(params.messages) || params.messages.length === 0) {
+      throw new ValidationError('chat() requires at least one message.', 'MESSAGES_REQUIRED');
+    }
+
+    const body: ChatCompletionRequest = { model, messages: params.messages };
+    if (params.temperature !== undefined) body.temperature = params.temperature;
+    if (params.maxTokens !== undefined) body.max_tokens = params.maxTokens;
+    if (params.topP !== undefined) body.top_p = params.topP;
+    if (params.frequencyPenalty !== undefined) body.frequency_penalty = params.frequencyPenalty;
+    if (params.presencePenalty !== undefined) body.presence_penalty = params.presencePenalty;
+    if (params.stop !== undefined) body.stop = params.stop;
+    if (params.tools !== undefined) body.tools = params.tools;
+    if (params.toolChoice !== undefined) body.tool_choice = params.toolChoice;
+    if (params.reasoningEffort !== undefined) body.reasoning_effort = params.reasoningEffort;
+    if (params.chatTemplateKwargs !== undefined) body.chat_template_kwargs = params.chatTemplateKwargs;
+    if (params.responseFormat !== undefined) body.response_format = params.responseFormat;
+    if (params.user !== undefined) body.user = params.user;
+    if (params.projectId !== undefined) body.project_id = params.projectId;
+    if (params.requestId !== undefined) body.request_id = params.requestId;
+    if (params.provider !== undefined) body.provider = params.provider;
+    if (params.metadata !== undefined) body.metadata = params.metadata;
+
+    const headers: Record<string, string> = {};
+    if (options.executionPolicy) headers['x-execution-policy'] = options.executionPolicy;
+    if (options.priority) headers['x-priority'] = options.priority;
+    const config: { timeout?: number; headers?: Record<string, string> } = {};
+    if (options.timeoutMs !== undefined) config.timeout = options.timeoutMs;
+    if (Object.keys(headers).length > 0) config.headers = headers;
+
+    return (await this.post(
+      '/v1/chat/completions',
+      body,
+      Object.keys(config).length > 0 ? config : undefined
+    )) as ChatCompletionResponse;
   }
 }
