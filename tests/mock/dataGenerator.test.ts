@@ -72,6 +72,9 @@ describe('generateData', () => {
         properties: {
           image: { type: 'string', format: 'image' },
         },
+        // Required: optional fields are omitted at random (20%), which made
+        // this test fail about one run in five.
+        required: ['image'],
       },
     };
 
@@ -98,6 +101,9 @@ describe('generateData', () => {
         properties: {
           description: { type: 'string' },
         },
+        // Required for the same reason as the image test: optional fields
+        // are omitted at random.
+        required: ['description'],
       },
     };
 
@@ -121,7 +127,14 @@ describe('generateData', () => {
       },
     };
 
+    // Optional fields are dropped when Math.random() < 0.2. Alternate below and
+    // above that threshold so the assertion is deterministic.
+    let call = 0;
+    const random = jest
+      .spyOn(Math, 'random')
+      .mockImplementation(() => (call++ % 2 === 0 ? 0.1 : 0.9));
     const result = await generateData(schemaWithOptional, 10);
+    random.mockRestore();
 
     // Some records should have optionalField, some shouldn't
     const withOptional = result.filter(r => r.optionalField !== undefined);
