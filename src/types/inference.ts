@@ -1,8 +1,8 @@
 /**
- * Direct inference: embeddings and rerank.
+ * Direct inference: embeddings, rerank and chat completions.
  *
- * Wire shapes for the model-router public endpoints `POST /v1/embeddings` and
- * `POST /v1/rerank`. Field names are kept exactly as they appear on the wire
+ * Wire shapes for the model-router public endpoints `POST /v1/embeddings`,
+ * `POST /v1/rerank` and `POST /v1/chat/completions`. Field names are kept exactly as they appear on the wire
  * (snake_case) so these types can be used to type raw responses.
  *
  * Provenance (`whizai`) is optional everywhere: older, non-fleet embedding
@@ -211,3 +211,212 @@ export interface DegradedRerankResponse {
 }
 
 export type RerankOutcome = RankedRerankResponse | DegradedRerankResponse;
+
+// =============================================================================
+// CHAT COMPLETIONS — POST /v1/chat/completions
+// =============================================================================
+//
+// OpenAI-compatible, served by model-router (`ChatCompletionRequest` /
+// `ChatCompletionResponse` in services/model-router/src/models.py). Unlike
+// embeddings/rerank there is no `whizai` block: attribution rides in
+// `execution` (body) and the `x-whizai-*` response headers.
+
+/** Pinned capability alias for grounded JSON extraction. */
+export const STRUCTURED_EXTRACTION_MODEL = 'structured-extraction';
+
+export type ChatRole = 'system' | 'user' | 'assistant' | 'tool';
+
+/** An OpenAI-style tool call on an assistant turn. */
+export interface ChatToolCall {
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
+  [key: string]: unknown;
+}
+
+export interface ChatMessage {
+  role: ChatRole;
+  /** Absent on an assistant turn that only calls tools. */
+  content?: string | null;
+  tool_calls?: ChatToolCall[] | null;
+  /** Which tool call a `role: 'tool'` message answers. */
+  tool_call_id?: string | null;
+  /** Tool name, for `role: 'tool'` messages. */
+  name?: string | null;
+}
+
+/** JSON-schema-constrained output (OpenAI `response_format.type = 'json_schema'`). */
+export interface ChatJsonSchemaFormat {
+  type: 'json_schema';
+  json_schema: {
+    name: string;
+    schema: Record<string, unknown>;
+    strict?: boolean;
+    description?: string;
+  };
+}
+
+/** Forwarded verbatim to the runtime. */
+export type ChatResponseFormat =
+  | { type: 'text' }
+  | { type: 'json_object' }
+  | ChatJsonSchemaFormat;
+
+/** Thinking control, forwarded verbatim. `'none'` turns thinking off for extraction. */
+export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | (string & {});
+
+/** model-router `ProviderType`; pins execution to a provider (fails closed if unavailable). */
+export type ChatProvider =
+  | 'openai'
+  | 'fal'
+  | 'ollama'
+  | 'vllm'
+  | 'replicate'
+  | 'anthropic'
+  | 'mistral'
+  | 'gemini'
+  | 'mock'
+  | 'kling'
+  | 'kieai'
+  | (string & {});
+
+/** Wire request body. Non-streaming only: `client.chat()` never sends `stream: true`. */
+export interface ChatCompletionRequest {
+  model: string;
+  messages: ChatMessage[];
+  /** 0..2. Server default 0.7. */
+  temperature?: number;
+  max_tokens?: number;
+  /** 0..1. Server default 1.0. */
+  top_p?: number;
+  frequency_penalty?: number;
+  presence_penalty?: number;
+  stop?: string[];
+  stream?: false;
+  tools?: Array<Record<string, unknown>>;
+  tool_choice?: 'auto' | 'none' | 'required' | Record<string, unknown>;
+  reasoning_effort?: ReasoningEffort;
+  chat_template_kwargs?: Record<string, unknown>;
+  response_format?: ChatResponseFormat;
+  user?: string;
+  project_id?: string;
+  request_id?: string;
+  provider?: ChatProvider;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ChatCompletionChoice {
+  index: number;
+  message: ChatMessage;
+  /** `stop`, `length`, `tool_calls`, ... */
+  finish_reason?: string | null;
+}
+
+export interface ChatUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  [key: string]: unknown;
+}
+
+/** One failed attempt before the one that answered (ADR 0013). */
+export interface ChatResolutionAttempt {
+  model?: string;
+  workerName?: string;
+  outcome?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * How the requested name became the model that ran (alias -> family -> model -> worker).
+ * Present only when the request was resolved through the fleet.
+ */
+export interface ChatResolution {
+  requested?: string;
+  alias?: string;
+  aliasVersion?: string | number;
+  capability?: string;
+  family?: string;
+  /** `registry` or `worker-declared`. */
+  classification?: string;
+  declaredBy?: string;
+  model?: string;
+  traitsApplied?: string[];
+  attempt?: number;
+  previousAttempts?: ChatResolutionAttempt[];
+  worker?: InferenceWorker | null;
+  [key: string]: unknown;
+}
+
+/**
+ * Execution attribution, carried verbatim from the provider. Absent means
+ * unattributed — never infer a tier from its absence.
+ */
+export interface ChatExecution {
+  provider?: string;
+  /** `fleet` when a fleet worker ran it. */
+  execution?: string;
+  fleet_job_id?: string;
+  /** Runtime that produced it (`vllm`, `sglang`, `ollama`, ...). */
+  runtime?: string;
+  execution_policy?: string;
+  resolution?: ChatResolution;
+  [key: string]: unknown;
+}
+
+export interface ChatCompletionResponse {
+  id: string;
+  object: 'chat.completion' | (string & {});
+  created: number;
+  /** The concrete model id that generated the answer (not the alias). */
+  model: string;
+  choices: ChatCompletionChoice[];
+  usage: ChatUsage;
+  /** Routing family (e.g. `ollama`, `vllm`) — not the machine. */
+  provider?: ChatProvider | null;
+  execution?: ChatExecution | null;
+  request_id?: string | null;
+}
+
+/** model-router execution policy, sent as `x-execution-policy`. */
+export type ExecutionPolicy = 'fleet-required' | 'fleet-preferred' | 'fleet-disabled';
+
+/** Parameters for {@link WhizuraiClient.chat} (camelCase, mapped to the wire). */
+export interface ChatParams {
+  /** Capability alias (e.g. `structured-extraction`) or model id. Required — no default. */
+  model: string;
+  messages: ChatMessage[];
+  temperature?: number;
+  maxTokens?: number;
+  topP?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
+  stop?: string[];
+  tools?: Array<Record<string, unknown>>;
+  toolChoice?: ChatCompletionRequest['tool_choice'];
+  /** e.g. `'none'` to disable thinking on extraction calls. */
+  reasoningEffort?: ReasoningEffort;
+  /** e.g. `{ enable_thinking: false }`. */
+  chatTemplateKwargs?: Record<string, unknown>;
+  responseFormat?: ChatResponseFormat;
+  user?: string;
+  projectId?: string;
+  requestId?: string;
+  /** Pin to a provider; an unavailable provider fails closed instead of being substituted. */
+  provider?: ChatProvider;
+  metadata?: Record<string, unknown>;
+}
+
+/** Per-call options for {@link WhizuraiClient.chat}. */
+export interface ChatCallOptions {
+  /**
+   * Sent as `x-execution-policy`. `fleet-required` never leaves the fleet: when
+   * nothing serves the alias the call rejects (503 `no_capable_model`) instead
+   * of falling back.
+   */
+  executionPolicy?: ExecutionPolicy;
+  /** Sent as `x-priority` (e.g. `interactive`, `batch`); the gateway checks it against the app's policy. */
+  priority?: string;
+  /** Request timeout for this call, in ms. Defaults to the client timeout. */
+  timeoutMs?: number;
+}

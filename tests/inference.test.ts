@@ -12,6 +12,7 @@ import {
   assertSameEmbeddingSpace,
   EmbeddingSpaceError,
   RECOMMENDED_EMBEDDING_MODEL,
+  STRUCTURED_EXTRACTION_MODEL,
   WhizuraiError,
 } from '../src/index';
 import { parseErrorBody } from '../src/http-client';
@@ -262,6 +263,122 @@ describe('client.rerank', () => {
     await expect(
       client.rerank({ model: '', query: 'q', documents: DOCS }, { fallback: 'original-order' })
     ).rejects.toBeInstanceOf(ValidationError);
+  });
+});
+
+describe('client.chat', () => {
+  const CHAT_RESPONSE = {
+    id: 'chatcmpl-1',
+    object: 'chat.completion',
+    created: 1791245341,
+    model: 'GLM-5.3-Flash-EXL3',
+    choices: [{ index: 0, message: { role: 'assistant', content: '{"events":[]}' }, finish_reason: 'stop' }],
+    usage: { prompt_tokens: 12, completion_tokens: 5, total_tokens: 17 },
+    provider: 'vllm',
+    execution: {
+      provider: 'vllm',
+      execution: 'fleet',
+      fleet_job_id: 'job-1',
+      runtime: 'tensorfold',
+      execution_policy: 'fleet-required',
+      resolution: {
+        requested: 'structured-extraction',
+        alias: 'structured-extraction',
+        capability: 'structured_extraction',
+        family: 'glm-5.3-flash',
+        classification: 'registry',
+        model: 'GLM-5.3-Flash-EXL3',
+        attempt: 1,
+        worker: { id: 'w1', name: 'spark01' },
+      },
+    },
+    request_id: 'req-1',
+  };
+
+  it('posts the snake_case wire body with policy headers and returns execution attribution', async () => {
+    mockHttp.post.mockResolvedValueOnce({ data: CHAT_RESPONSE });
+
+    const res = await client.chat(
+      {
+        model: STRUCTURED_EXTRACTION_MODEL,
+        messages: [{ role: 'user', content: 'extract' }],
+        maxTokens: 512,
+        temperature: 0,
+        reasoningEffort: 'none',
+        chatTemplateKwargs: { enable_thinking: false },
+        responseFormat: {
+          type: 'json_schema',
+          json_schema: { name: 'events', schema: { type: 'object' }, strict: true },
+        },
+        requestId: 'req-1',
+      },
+      { executionPolicy: 'fleet-required', priority: 'batch', timeoutMs: 120_000 }
+    );
+
+    expect(mockHttp.post).toHaveBeenCalledWith(
+      '/v1/chat/completions',
+      {
+        model: 'structured-extraction',
+        messages: [{ role: 'user', content: 'extract' }],
+        max_tokens: 512,
+        temperature: 0,
+        reasoning_effort: 'none',
+        chat_template_kwargs: { enable_thinking: false },
+        response_format: {
+          type: 'json_schema',
+          json_schema: { name: 'events', schema: { type: 'object' }, strict: true },
+        },
+        request_id: 'req-1',
+      },
+      { timeout: 120_000, headers: { 'x-execution-policy': 'fleet-required', 'x-priority': 'batch' } }
+    );
+    expect(res.choices[0].message.content).toBe('{"events":[]}');
+    expect(res.model).toBe('GLM-5.3-Flash-EXL3');
+    expect(res.execution?.resolution?.alias).toBe('structured-extraction');
+    expect(res.execution?.resolution?.worker?.name).toBe('spark01');
+  });
+
+  it('sends only model + messages when nothing else is set, and tolerates no attribution', async () => {
+    const { execution: _omit, ...unattributed } = CHAT_RESPONSE;
+    mockHttp.post.mockResolvedValueOnce({ data: unattributed });
+    const res = await client.chat({ model: 'chat', messages: [{ role: 'user', content: 'hi' }] });
+    expect(mockHttp.post).toHaveBeenCalledWith(
+      '/v1/chat/completions',
+      { model: 'chat', messages: [{ role: 'user', content: 'hi' }] },
+      undefined
+    );
+    expect(res.execution).toBeUndefined();
+  });
+
+  it('requires an explicit model and at least one message', async () => {
+    await expect(client.chat({ model: '', messages: [{ role: 'user', content: 'x' }] })).rejects.toBeInstanceOf(
+      ValidationError
+    );
+    await expect(client.chat({ model: 'chat', messages: [] })).rejects.toMatchObject({ code: 'MESSAGES_REQUIRED' });
+    expect(mockHttp.post).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a 503 no_capable_model as an error (never falls back)', async () => {
+    mockHttp.post.mockImplementationOnce(() =>
+      httpError(503, { detail: { error: 'no_capable_model', message: 'nothing serves structured_extraction' } })
+    );
+    await expect(
+      client.chat({ model: 'structured-extraction', messages: [{ role: 'user', content: 'x' }] })
+    ).rejects.toMatchObject({ status: 503, code: 'no_capable_model' });
+  });
+
+  it('adds the inferenceBaseUrl hint on 401', async () => {
+    mockHttp.post.mockImplementationOnce(() => httpError(401, { detail: 'Invalid API key' }));
+    const err = await client.chat({ model: 'chat', messages: [{ role: 'user', content: 'x' }] }).catch((e) => e);
+    expect(err).toBeInstanceOf(AuthenticationError);
+    expect(err.message).toContain('check inferenceBaseUrl: http://model-router.test');
+  });
+
+  it('throws INFERENCE_BASE_URL_REQUIRED when unset', async () => {
+    const gatewayOnly = new WhizuraiClient({ apiKey: 'k', baseUrl: 'http://localhost:3000' });
+    await expect(
+      gatewayOnly.chat({ model: 'chat', messages: [{ role: 'user', content: 'x' }] })
+    ).rejects.toMatchObject({ code: 'INFERENCE_BASE_URL_REQUIRED' });
   });
 });
 

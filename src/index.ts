@@ -28,6 +28,9 @@ import { ArtifactsResource } from './resources/artifacts';
 import { TriggersResource } from './resources/triggers';
 import { InferenceResource } from './resources/inference';
 import {
+  ChatCallOptions,
+  ChatCompletionResponse,
+  ChatParams,
   EmbedParams,
   EmbeddingsResponse,
   HealthResponse,
@@ -98,6 +101,17 @@ export class WhizuraiClient {
     return this._inference.rerank(params, options);
   }
 
+  /**
+   * OpenAI-compatible chat completion (`POST /v1/chat/completions` on model-router —
+   * needs `inferenceBaseUrl`). `model` is required; prefer a capability alias such as
+   * `structured-extraction`. Non-streaming. The response's `model` is the concrete
+   * model that answered and `execution.resolution` says how the alias resolved;
+   * `execution` absent means unattributed.
+   */
+  chat(params: ChatParams, options?: ChatCallOptions): Promise<ChatCompletionResponse> {
+    return this._inference.chat(params, options);
+  }
+
   /** Unauthenticated gateway health check (`GET /health`). */
   async health(): Promise<HealthResponse> {
     const res = await this._http.get('/health');
@@ -141,6 +155,7 @@ export {
   RECOMMENDED_RERANK_MODEL,
   EMBEDDINGS_MAX_INPUTS,
   RERANK_MAX_DOCUMENTS,
+  STRUCTURED_EXTRACTION_MODEL,
 } from './types/inference';
 
 // Errors.

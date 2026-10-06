@@ -295,16 +295,17 @@ processImage().catch(console.error);
 > instead — capabilities wrap those primitives with validation, routing, and
 > artifact tracking.
 
-## Embeddings and Rerank
+## Embeddings, Rerank and Chat
 
-Direct inference against `POST /v1/embeddings` and `POST /v1/rerank`.
+Direct inference against `POST /v1/embeddings`, `POST /v1/rerank` and
+`POST /v1/chat/completions` (see [Chat completions](#chat-completions)).
 Responses keep their wire shape (snake_case), including the optional `whizai`
 provenance block.
 
 These endpoints are served by **model-router**, not the api-gateway at
 `baseUrl`, so set `inferenceBaseUrl`. The same `apiKey` authenticates there
 (sent as `X-API-Key` and `Authorization: Bearer`; model-router verifies it with
-the gateway). Without `inferenceBaseUrl`, `embed()`/`rerank()` throw
+the gateway). Without `inferenceBaseUrl`, `embed()`/`rerank()`/`chat()` throw
 `WhizuraiError` with code `INFERENCE_BASE_URL_REQUIRED`.
 
 ```typescript
@@ -395,6 +396,51 @@ throws in fallback mode.
 Error messages are taken from any body shape the platform returns:
 `{error: {code, message}}`, `{error, message}`, or FastAPI's `{detail: …}`
 (string, `{error, message}` object, or validation list).
+
+### Chat completions
+
+`client.chat(params, options?)` calls model-router's OpenAI-compatible
+`POST /v1/chat/completions`. `model` is **required**: name a capability alias
+(`structured-extraction`, `chat`, `coding`, …), not a concrete model id, so the
+router can resolve it to whatever currently serves that capability.
+
+```typescript
+import { STRUCTURED_EXTRACTION_MODEL } from '@whizurai/sdk-js';
+
+const res = await client.chat(
+  {
+    model: STRUCTURED_EXTRACTION_MODEL, // 'structured-extraction'
+    messages: [
+      { role: 'system', content: 'Extract events as JSON.' },
+      { role: 'user', content: postText },
+    ],
+    maxTokens: 2048,
+    temperature: 0,
+    reasoningEffort: 'none', // or chatTemplateKwargs: { enable_thinking: false }
+    responseFormat: {
+      type: 'json_schema',
+      json_schema: { name: 'events', schema: eventsSchema, strict: true },
+    },
+  },
+  { executionPolicy: 'fleet-required', timeoutMs: 120_000 }
+);
+
+res.choices[0].message.content; // the JSON string
+res.model;                      // concrete model that answered, e.g. 'GLM-5.3-Flash-EXL3'
+res.execution?.resolution;      // alias -> family -> model -> worker; absent = unattributed
+```
+
+- camelCase params map to the wire (`maxTokens` → `max_tokens`,
+  `responseFormat` → `response_format`, `reasoningEffort`, `chatTemplateKwargs`,
+  `topP`, `stop`, `tools`/`toolChoice`, `provider`, `metadata`, …); unset fields
+  are not sent, so server defaults apply.
+- `options.executionPolicy` is sent as `x-execution-policy`, `options.priority`
+  as `x-priority`. Under `fleet-required`, a capability nothing serves rejects
+  with a 503 whose `code` is `no_capable_model` — do not fall back to another
+  provider yourself.
+- The response has no `whizai` block (unlike embed/rerank): attribution is
+  `execution` (`execution`, `runtime`, `fleet_job_id`, `resolution`).
+- Non-streaming only; `stream: true` is not supported by `chat()`.
 
 ### Legacy `EmbeddingsClient`
 
