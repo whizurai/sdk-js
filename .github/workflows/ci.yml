@@ -22,5 +22,5 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm run test -- --maxWorkers=2
+      - run: pnpm exec jest --maxWorkers=2
       - run: pnpm build
