@@ -8,19 +8,19 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Self-hosted ARC scale set for the whizurai org (kubernetes-manifests:
+    # cheddarwhizzy-staging/infra/arc-runners/arc-whizurai). GitHub-hosted runners are not used.
+    runs-on: arc-whizurai
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v2
+      - uses: pnpm/action-setup@v4
         with:
           version: 9
       - uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'pnpm'
-      - run: pnpm install
+          node-version: '20'
+      - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm test
+      - run: pnpm test --maxWorkers=2
       - run: pnpm build
-
