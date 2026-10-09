@@ -246,6 +246,15 @@ export interface ExecuteCapabilityResponse {
   run: Run;
 }
 
+/** Result of cancelling a capability run. */
+export interface CancelCapabilityRunResponse {
+  id: string;
+  status: string;
+  workflowRunId?: string | null;
+  updatedAt?: string;
+  runType?: 'capability';
+}
+
 export interface DryRunResult {
   valid: boolean;
   status?: 'valid' | 'warning' | 'error' | string;
@@ -329,4 +338,5 @@ export interface StatusResponse {
 
 // Capability-specific typed shapes.
 export * from './video-multi-shot';
+export * from './speech-synthesize';
 export * from './inference';

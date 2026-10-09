@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.2.0 (unreleased)
+
+### Added
+
+- Typed `speech:synthesize` shapes: `SPEECH_SYNTHESIZE`, `SpeechSynthesizeInput`,
+  `SpeechSynthesizeResult`, `SpeechEngine`, `SpeechPriority`, `SpeechWarning`.
+  No new endpoint: run it with `client.capabilities.run(SPEECH_SYNTHESIZE, input)`.
+  The capability is flag-gated on the platform and ships as draft.
+- `client.capabilities.cancel(runId)` for the existing
+  `POST /v1/capabilities/capability-runs/:runId/cancel`. It marks the run and
+  cancels its workflow run best-effort; stopping work already on a worker is a
+  platform follow-up.
+
+### Fixed
+
+- Security: `client.artifacts.download` no longer sends `Authorization` or
+  `X-API-Key` to a foreign origin. Absolute artifact URLs on another host
+  (object storage, a CDN) are fetched with a bare client, and a redirect off the
+  gateway is followed without credentials. Relative and same-origin URLs still
+  use the authenticated client.
+
 ## 3.1.0 (unreleased)
 
 ### Added
