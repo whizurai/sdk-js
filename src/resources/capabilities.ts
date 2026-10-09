@@ -7,6 +7,7 @@
 
 import { AxiosInstance } from 'axios';
 import {
+  CancelCapabilityRunResponse,
   Capability,
   DryRunResult,
   ExecuteCapabilityResponse,
@@ -61,6 +62,22 @@ export class CapabilitiesResource {
       { headers }
     );
     return res.data as ExecuteCapabilityResponse;
+  }
+
+  /**
+   * Cancel a capability run (`POST /v1/capabilities/capability-runs/:runId/cancel`).
+   * Idempotent for an already-cancelled run. `runId` is the id returned by
+   * {@link CapabilitiesResource.run}.
+   *
+   * Cancelling marks the run and cancels its workflow run best-effort. It does
+   * not yet stop work already handed to a worker; that propagation is
+   * platform-side.
+   */
+  async cancel(runId: string): Promise<CancelCapabilityRunResponse> {
+    const res = await this.http.post(
+      `/v1/capabilities/capability-runs/${encodeURIComponent(runId)}/cancel`
+    );
+    return res.data as CancelCapabilityRunResponse;
   }
 
   /** Validate inputs and estimate cost without executing. */

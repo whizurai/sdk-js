@@ -24,6 +24,7 @@ const axios = require('axios');
 let responseErrorInterceptor: (err: AxiosError) => unknown;
 
 const mockHttp = {
+  defaults: { baseURL: 'http://localhost:3000' },
   interceptors: {
     request: { use: jest.fn() },
     response: {
@@ -121,6 +122,13 @@ describe('capabilities', () => {
     expect(run.id).toBe('r1');
   });
 
+  it('cancel() posts to the capability-run cancel route', async () => {
+    mockHttp.post.mockResolvedValue({ data: { id: 'r1', status: 'cancelled' } });
+    const res = await client.capabilities.cancel('r1');
+    expect(mockHttp.post).toHaveBeenCalledWith('/v1/capabilities/capability-runs/r1/cancel');
+    expect(res.status).toBe('cancelled');
+  });
+
   it('dryRun() derives valid from status', async () => {
     mockHttp.post.mockResolvedValue({ data: { status: 'valid', estimatedCost: 3 } });
     const res = await client.capabilities.dryRun('c1', { prompt: 'hi' });
@@ -204,6 +212,59 @@ describe('artifacts', () => {
     const art = await client.artifacts.get('a1');
     expect(mockHttp.get).toHaveBeenCalledWith('/v1/artifacts/a1');
     expect(art.type).toBe('image');
+  });
+});
+
+describe('artifacts.download credential handling', () => {
+  let client: WhizuraiClient;
+  beforeEach(() => {
+    jest.resetAllMocks();
+    axios.create.mockReturnValue(mockHttp);
+    client = new WhizuraiClient(config);
+  });
+
+  it('does not send the platform key to a foreign origin', async () => {
+    mockHttp.get.mockResolvedValueOnce({
+      data: { id: 'a1', url: 'https://storage.example.net/a.wav?sig=x' },
+    });
+    axios.get.mockResolvedValue({ data: new ArrayBuffer(4) });
+    const buf = await client.artifacts.download('a1');
+    expect(buf.byteLength).toBe(4);
+    // Only the metadata lookup used the authenticated client.
+    expect(mockHttp.get).toHaveBeenCalledTimes(1);
+    expect(axios.get).toHaveBeenCalledWith('https://storage.example.net/a.wav?sig=x', {
+      responseType: 'arraybuffer',
+      headers: {},
+    });
+  });
+
+  it('uses the authenticated client for a relative or same-origin URL', async () => {
+    mockHttp.get
+      .mockResolvedValueOnce({ data: { id: 'a1', url: '/v1/artifacts/a1/content' } })
+      .mockResolvedValueOnce({ status: 200, data: new ArrayBuffer(2) })
+      .mockResolvedValueOnce({ data: { id: 'a2', url: 'http://localhost:3000/files/a2' } })
+      .mockResolvedValueOnce({ status: 200, data: new ArrayBuffer(3) });
+    expect((await client.artifacts.download('a1')).byteLength).toBe(2);
+    expect((await client.artifacts.download('a2')).byteLength).toBe(3);
+    expect(axios.get).not.toHaveBeenCalled();
+  });
+
+  it('follows a redirect off the gateway without credentials', async () => {
+    mockHttp.get
+      .mockResolvedValueOnce({ data: { id: 'a1', url: '/v1/artifacts/a1/content' } })
+      .mockResolvedValueOnce({ status: 302, headers: { location: 'https://cdn.example.net/x' } });
+    axios.get.mockResolvedValue({ data: new ArrayBuffer(5) });
+    expect((await client.artifacts.download('a1')).byteLength).toBe(5);
+    expect(axios.get).toHaveBeenCalledWith('https://cdn.example.net/x', {
+      responseType: 'arraybuffer',
+      headers: {},
+    });
+  });
+
+  it('maps a foreign-origin failure to a typed error', async () => {
+    mockHttp.get.mockResolvedValueOnce({ data: { id: 'a1', url: 'https://s.example.net/a' } });
+    axios.get.mockRejectedValue(makeAxiosError(403, 'denied'));
+    await expect(client.artifacts.download('a1')).rejects.toBeInstanceOf(WhizuraiError);
   });
 });
 
