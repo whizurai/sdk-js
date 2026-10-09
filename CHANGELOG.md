@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.3.0 (unreleased)
+
+### Added
+
+- Typed `speech:synthesize` shapes: `SPEECH_SYNTHESIZE`, `SpeechSynthesizeInput`,
+  `SpeechSynthesizeResult`, `SpeechEngine`, `SpeechPriority`, `SpeechWarning`.
+  No new endpoint: run it with `client.capabilities.run(SPEECH_SYNTHESIZE, input)`.
+- `client.capabilities.cancel(runId)` for the existing
+  `POST /v1/capabilities/capability-runs/:runId/cancel`. It marks the run and
+  cancels its workflow run best-effort.
+
 ## 3.2.1
 
 ### Fixed

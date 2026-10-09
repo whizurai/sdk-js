@@ -24,6 +24,7 @@ const axios = require('axios');
 let responseErrorInterceptor: (err: AxiosError) => unknown;
 
 const mockHttp = {
+  defaults: { baseURL: 'http://localhost:3000' },
   interceptors: {
     request: { use: jest.fn() },
     response: {
@@ -162,6 +163,13 @@ describe('capabilities', () => {
       { webhookUrl: 'https://a.example/hook', runFlags: { callbackUrl: 'https://b.example/hook' } }
     );
     expect(mockHttp.post.mock.calls[1][1].runFlags).toEqual({ callbackUrl: 'https://b.example/hook' });
+  });
+
+  it('cancel() posts to the capability-run cancel route', async () => {
+    mockHttp.post.mockResolvedValue({ data: { id: 'r1', status: 'cancelled' } });
+    const res = await client.capabilities.cancel('r1');
+    expect(mockHttp.post).toHaveBeenCalledWith('/v1/capabilities/capability-runs/r1/cancel');
+    expect(res.status).toBe('cancelled');
   });
 
   it('dryRun() derives valid from status', async () => {
