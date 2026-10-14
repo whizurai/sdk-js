@@ -1,5 +1,28 @@
 # Changelog
 
+## 3.2.0 (unreleased)
+
+### Added
+
+- `capabilities.run()` options the platform's execute endpoint reads but the SDK
+  could not send: `executionMode`, `runFlags` (`executionProfile`, `callbackUrl`,
+  `providerAttemptPolicy`, …), `mock`, per-request `headers` (e.g.
+  `x-correlation-id`; `Authorization`/`X-API-Key` are dropped) and `timeout`.
+  Without `runFlags.executionProfile` the platform defaults a run to the mock
+  provider, so real callers need it.
+- `runs.artifacts(runId, { grouped: false })` for the ungrouped view, where each
+  entry carries `role: 'input' | 'output'`. The grouped default is unchanged; it
+  includes inputs and reports `roles[]`, so a caller looking for outputs has to
+  filter on one or the other.
+- `Artifact.role` and `Artifact.roles` are now typed.
+
+### Fixed
+
+- `capabilities.run({ webhookUrl })` did nothing: the platform reads the
+  completion webhook only from `runFlags.callbackUrl` and ignores a top-level
+  `webhookUrl`. It is now sent as `runFlags.callbackUrl`; an explicit
+  `runFlags.callbackUrl` wins.
+
 ## 3.1.0 (unreleased)
 
 ### Added

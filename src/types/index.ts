@@ -176,6 +176,13 @@ export interface Artifact {
   stepId?: string;
   labels?: Record<string, string>;
   metadata?: Record<string, unknown>;
+  /**
+   * Ungrouped run view (`runs.artifacts(id, { grouped: false })`): whether the
+   * file was an input to the run or something it produced.
+   */
+  role?: 'input' | 'output';
+  /** Grouped run view: every role the file played across the run's steps. */
+  roles?: Array<'input' | 'output' | 'intermediate' | 'debug'>;
   createdAt: string;
 }
 
@@ -235,11 +242,39 @@ export interface ListCapabilitiesOptions {
 export interface RunCapabilityOptions {
   /** Reuse a previous run if the same key was used before. */
   idempotencyKey?: string;
-  /** Webhook URL called when the run completes. */
+  /** Webhook URL called when the run completes. Sent as `runFlags.callbackUrl`, which wins if both are set. */
   webhookUrl?: string;
   /** Provider/model routing overrides. */
   routing?: { provider?: string; model?: string };
   metadata?: Record<string, string>;
+  /** How the run was started; the platform records it on the run. Defaults to `api` server-side. */
+  executionMode?: 'api' | 'manual' | 'webhook' | 'scheduled';
+  /**
+   * Per-run flags the platform reads from the execute body, e.g.
+   * `executionProfile` (`mock` | `live_smoke` | `live_full`), `callbackUrl`
+   * (the run's completion webhook) and `providerAttemptPolicy`.
+   */
+  runFlags?: {
+    executionProfile?: 'mock' | 'live_smoke' | 'live_full';
+    callbackUrl?: string;
+    providerAttemptPolicy?: { maxAttempts: number };
+    [key: string]: unknown;
+  };
+  /** Ask for a mock run. Honoured only when the platform allows mock mode for the app. */
+  mock?: boolean;
+  /** Extra request headers, e.g. `x-correlation-id`. Cannot override auth headers. */
+  headers?: Record<string, string>;
+  /** Per-request timeout in ms, overriding the client's `timeout`. */
+  timeout?: number;
+}
+
+export interface RunArtifactsOptions {
+  /**
+   * `true` (default): the grouped view — one entry per file with its `roles`,
+   * inputs included. `false`: the ungrouped view, where every entry carries a
+   * single `role`, so callers can tell outputs from the inputs they sent.
+   */
+  grouped?: boolean;
 }
 
 export interface ExecuteCapabilityResponse {

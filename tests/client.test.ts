@@ -121,6 +121,48 @@ describe('capabilities', () => {
     expect(run.id).toBe('r1');
   });
 
+  it('run() forwards executionMode, mock, runFlags, headers and timeout', async () => {
+    mockHttp.post.mockResolvedValue({ data: { run: { id: 'r1', status: 'pending' } } });
+    await client.capabilities.run(
+      'image:edit',
+      { prompt: 'hi' },
+      {
+        idempotencyKey: 'k1',
+        executionMode: 'manual',
+        mock: true,
+        runFlags: { executionProfile: 'live_full', providerAttemptPolicy: { maxAttempts: 1 } },
+        headers: { 'x-correlation-id': 'corr-1', Authorization: 'Bearer stolen', 'X-API-Key': 'x' },
+        timeout: 5000,
+      }
+    );
+    expect(mockHttp.post).toHaveBeenCalledWith(
+      '/v1/capabilities/image%3Aedit/execute',
+      {
+        input: { prompt: 'hi' },
+        idempotencyKey: 'k1',
+        executionMode: 'manual',
+        mock: true,
+        runFlags: { executionProfile: 'live_full', providerAttemptPolicy: { maxAttempts: 1 } },
+      },
+      { headers: { 'x-correlation-id': 'corr-1', 'x-idempotency-key': 'k1' }, timeout: 5000 }
+    );
+  });
+
+  it('run() sends webhookUrl as runFlags.callbackUrl, letting an explicit callbackUrl win', async () => {
+    mockHttp.post.mockResolvedValue({ data: { run: { id: 'r1', status: 'pending' } } });
+    await client.capabilities.run('c1', {}, { webhookUrl: 'https://a.example/hook' });
+    expect(mockHttp.post.mock.calls[0][1]).toEqual({
+      input: {},
+      runFlags: { callbackUrl: 'https://a.example/hook' },
+    });
+    await client.capabilities.run(
+      'c1',
+      {},
+      { webhookUrl: 'https://a.example/hook', runFlags: { callbackUrl: 'https://b.example/hook' } }
+    );
+    expect(mockHttp.post.mock.calls[1][1].runFlags).toEqual({ callbackUrl: 'https://b.example/hook' });
+  });
+
   it('dryRun() derives valid from status', async () => {
     mockHttp.post.mockResolvedValue({ data: { status: 'valid', estimatedCost: 3 } });
     const res = await client.capabilities.dryRun('c1', { prompt: 'hi' });
@@ -165,6 +207,26 @@ describe('runs', () => {
     mockHttp.get.mockResolvedValue({ data: { outputs: [{ id: 'a1' }], inputs: [{ id: 'a2' }] } });
     const arts = await client.runs.artifacts('r1');
     expect(arts.map((a) => a.id)).toEqual(['a1', 'a2']);
+  });
+
+  it('artifacts() asks for the grouped view by default', async () => {
+    mockHttp.get.mockResolvedValue({ data: { artifacts: [{ id: 'a1', roles: ['output'] }] } });
+    await client.runs.artifacts('r1');
+    expect(mockHttp.get).toHaveBeenCalledWith('/v1/workflow-runs/r1/artifacts', {
+      params: { grouped: '1' },
+    });
+  });
+
+  it('artifacts({ grouped: false }) returns the ungrouped view with each role', async () => {
+    mockHttp.get.mockResolvedValue({
+      data: { outputs: [{ id: 'a1', role: 'output' }], inputs: [{ id: 'a2', role: 'input' }] },
+    });
+    const arts = await client.runs.artifacts('r1', { grouped: false });
+    expect(mockHttp.get).toHaveBeenCalledWith('/v1/workflow-runs/r1/artifacts', undefined);
+    expect(arts.map((a) => [a.id, a.role])).toEqual([
+      ['a1', 'output'],
+      ['a2', 'input'],
+    ]);
   });
 
   it('pollUntilDone() resolves once terminal', async () => {

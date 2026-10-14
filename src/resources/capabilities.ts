@@ -48,17 +48,25 @@ export class CapabilitiesResource {
   ): Promise<ExecuteCapabilityResponse> {
     const body: Record<string, unknown> = { input };
     if (options.idempotencyKey) body.idempotencyKey = options.idempotencyKey;
-    if (options.webhookUrl) body.webhookUrl = options.webhookUrl;
     if (options.routing) body.routing = options.routing;
     if (options.metadata) body.metadata = options.metadata;
+    if (options.executionMode) body.executionMode = options.executionMode;
+    // The platform reads the completion webhook from `runFlags.callbackUrl`
+    // only; a top-level `webhookUrl` is ignored server-side.
+    const runFlags = {
+      ...(options.webhookUrl && { callbackUrl: options.webhookUrl }),
+      ...options.runFlags,
+    };
+    if (Object.keys(runFlags).length > 0) body.runFlags = runFlags;
+    if (options.mock) body.mock = true;
 
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...stripAuthHeaders(options.headers) };
     if (options.idempotencyKey) headers['x-idempotency-key'] = options.idempotencyKey;
 
     const res = await this.http.post(
       `/v1/capabilities/${encodeURIComponent(idOrSlug)}/execute`,
       body,
-      { headers }
+      { headers, ...(options.timeout !== undefined && { timeout: options.timeout }) }
     );
     return res.data as ExecuteCapabilityResponse;
   }
@@ -77,4 +85,16 @@ export class CapabilitiesResource {
           (Array.isArray(data.errors) && data.errors.length === 0 && data.status !== 'error');
     return { ...data, valid } as DryRunResult;
   }
+}
+
+/** Caller headers may add context (correlation ids) but never replace the client's credentials. */
+function stripAuthHeaders(headers: Record<string, string> | undefined): Record<string, string> {
+  if (!headers) return {};
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(headers)) {
+    const lower = name.toLowerCase();
+    if (lower === 'authorization' || lower === 'x-api-key') continue;
+    out[name] = value;
+  }
+  return out;
 }

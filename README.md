@@ -66,6 +66,22 @@ console.log(`Run started: ${run.id}`);
 console.log(`Status: ${run.status}`);
 ```
 
+Further `run()` options, all optional:
+
+| Option | Sent as | Use |
+|---|---|---|
+| `webhookUrl` | `runFlags.callbackUrl` | Completion webhook for this run |
+| `runFlags` | body `runFlags` | `executionProfile` (`mock` / `live_smoke` / `live_full`; the platform defaults to mock without it), `callbackUrl`, `providerAttemptPolicy` |
+| `executionMode` | body | `api` (default) / `manual` / `webhook` / `scheduled` |
+| `mock` | body | Mock run; honoured only when the platform allows it for the app |
+| `headers` | request headers | e.g. `x-correlation-id`; auth headers cannot be overridden |
+| `timeout` | axios timeout | Per-request override of the client timeout (ms) |
+
+Run artifacts come in two views. `client.runs.artifacts(runId)` is grouped: one
+entry per file, inputs included, with `roles[]`. `client.runs.artifacts(runId,
+{ grouped: false })` gives one entry per use with a single `role`, outputs first.
+Filter on the role before treating an entry as something the run produced.
+
 ## Runs
 
 Runs represent executions of capabilities. All capability executions create runs.

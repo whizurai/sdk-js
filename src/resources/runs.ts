@@ -9,6 +9,7 @@ import {
   ListRunsResponse,
   PollOptions,
   Run,
+  RunArtifactsOptions,
   RunLogEntry,
   TERMINAL_RUN_STATUSES,
 } from '../types';
@@ -51,11 +52,16 @@ export class RunsResource {
     return Array.isArray(data) ? data : data?.logs ?? [];
   }
 
-  /** Artifacts produced by a run. */
-  async artifacts(runId: string): Promise<Artifact[]> {
+  /**
+   * Artifacts of a run — inputs included. The default grouped view dedupes
+   * files and reports `roles`; pass `{ grouped: false }` for one entry per
+   * use with a single `role`, outputs first.
+   */
+  async artifacts(runId: string, options: RunArtifactsOptions = {}): Promise<Artifact[]> {
+    const grouped = options.grouped ?? true;
     const res = await this.http.get(
       `/v1/workflow-runs/${encodeURIComponent(runId)}/artifacts`,
-      { params: { grouped: '1' } }
+      grouped ? { params: { grouped: '1' } } : undefined
     );
     const data = res.data;
     if (Array.isArray(data)) return data;
