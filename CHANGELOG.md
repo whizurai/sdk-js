@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.2.1
+
+### Fixed
+
+- `artifacts.download()` sent the platform's `Authorization` / `X-API-Key` to whatever host the
+  artifact URL named. Object storage rejects that (MinIO: `400 invalid header: authorization`), so
+  every download from `api.minio.cheddarwhizzy.com` failed, and a foreign host would have received
+  the key. Credentials now go only to the gateway's own origin. Any other absolute URL is fetched
+  bare, and a redirect off the gateway is followed without them. (Ported from draft #12.)
+
 ## 3.2.0 (unreleased)
 
 ### Added
