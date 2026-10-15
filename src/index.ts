@@ -31,6 +31,9 @@ import {
   ChatCallOptions,
   ChatCompletionResponse,
   ChatParams,
+  AudioTranscriptionResponse,
+  TranscribeCallOptions,
+  TranscribeParams,
   EmbedParams,
   EmbeddingsResponse,
   HealthResponse,
@@ -112,6 +115,15 @@ export class WhizuraiClient {
     return this._inference.chat(params, options);
   }
 
+  /**
+   * Transcribe audio (`POST /v1/audio/transcriptions` on model-router — needs
+   * `inferenceBaseUrl`). Exactly one of `fileUrl`, `file` (base64) or
+   * `artifactId`. The response's `provider` and `model` say what served it.
+   */
+  transcribe(params: TranscribeParams, options?: TranscribeCallOptions): Promise<AudioTranscriptionResponse> {
+    return this._inference.transcribe(params, options);
+  }
+
   /** Unauthenticated gateway health check (`GET /health`). */
   async health(): Promise<HealthResponse> {
     const res = await this._http.get('/health');
@@ -157,6 +169,9 @@ export {
   RERANK_MAX_DOCUMENTS,
   STRUCTURED_EXTRACTION_MODEL,
 } from './types/inference';
+// Capability slug constants (values; `export type *` below carries only types).
+export { SPEECH_SYNTHESIZE } from './types/speech-synthesize';
+export { VIDEO_MULTI_SHOT } from './types/video-multi-shot';
 
 // Errors.
 export * from './errors';

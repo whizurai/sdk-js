@@ -382,6 +382,104 @@ describe('client.chat', () => {
   });
 });
 
+describe('client.transcribe', () => {
+  const TRANSCRIPTION = {
+    text: 'Hello from the narrator.',
+    language: 'en',
+    duration: 2.4,
+    segments: null,
+    provider: 'vllm',
+    model: 'whisper-large-v3-turbo',
+    request_id: 'req-t1',
+  };
+
+  it('maps camelCase params to the snake_case wire body and returns the response', async () => {
+    mockHttp.post.mockResolvedValueOnce({ status: 200, data: TRANSCRIPTION });
+    const res = await client.transcribe({
+      fileUrl: 'https://storage.example.net/a.wav?sig=x',
+      language: 'en',
+      responseFormat: 'json',
+      model: 'whisper-large-v3-turbo',
+    });
+    expect(mockHttp.post).toHaveBeenCalledWith(
+      '/v1/audio/transcriptions',
+      {
+        file_url: 'https://storage.example.net/a.wav?sig=x',
+        language: 'en',
+        response_format: 'json',
+        model: 'whisper-large-v3-turbo',
+      },
+      undefined
+    );
+    expect(res.text).toBe('Hello from the narrator.');
+    expect(res.model).toBe('whisper-large-v3-turbo');
+    expect(res.provider).toBe('vllm');
+  });
+
+  it('sends base64 file, metadata and the priority/policy/deadline headers', async () => {
+    mockHttp.post.mockResolvedValueOnce({ status: 200, data: TRANSCRIPTION });
+    await client.transcribe(
+      {
+        file: 'UklGRg==',
+        prompt: 'NuthinButta',
+        temperature: 0,
+        timestampGranularities: ['segment'],
+        metadata: { priority: 'production' },
+      },
+      { executionPolicy: 'fleet-required', priority: 'production', timeoutMs: 60_000 }
+    );
+    expect(mockHttp.post).toHaveBeenCalledWith(
+      '/v1/audio/transcriptions',
+      {
+        file: 'UklGRg==',
+        prompt: 'NuthinButta',
+        temperature: 0,
+        timestamp_granularities: ['segment'],
+        metadata: { priority: 'production' },
+      },
+      {
+        timeout: 60_000,
+        headers: {
+          'x-execution-policy': 'fleet-required',
+          'x-priority': 'production',
+          'x-request-timeout-ms': '60000',
+        },
+      }
+    );
+  });
+
+  it('sends artifact_id for an artifact source', async () => {
+    mockHttp.post.mockResolvedValueOnce({ status: 200, data: TRANSCRIPTION });
+    await client.transcribe({ artifactId: 'art-1' });
+    expect(mockHttp.post).toHaveBeenCalledWith('/v1/audio/transcriptions', { artifact_id: 'art-1' }, undefined);
+  });
+
+  it('requires exactly one audio source', async () => {
+    await expect(client.transcribe({})).rejects.toMatchObject({ code: 'AUDIO_SOURCE_REQUIRED' });
+    await expect(client.transcribe({ fileUrl: 'https://x/a.wav', file: 'AA==' })).rejects.toBeInstanceOf(
+      ValidationError
+    );
+    expect(mockHttp.post).not.toHaveBeenCalled();
+  });
+
+  it('rejects a 202 pending answer with TRANSCRIPTION_PENDING and the job id', async () => {
+    mockHttp.post.mockResolvedValueOnce({ status: 202, data: { jobId: 'job-9', state: 'queued' } });
+    const err = await client
+      .transcribe({ fileUrl: 'https://x/a.wav', metadata: { idempotencyKey: 'k1' } })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(WhizuraiError);
+    expect(err.code).toBe('TRANSCRIPTION_PENDING');
+    expect(err.details).toEqual({ jobId: 'job-9', state: 'queued' });
+  });
+
+  it('throws INFERENCE_BASE_URL_REQUIRED when unset', async () => {
+    const gatewayOnly = new WhizuraiClient({ apiKey: 'k', baseUrl: 'http://localhost:3000' });
+    await expect(gatewayOnly.transcribe({ fileUrl: 'https://x/a.wav' })).rejects.toMatchObject({
+      code: 'INFERENCE_BASE_URL_REQUIRED',
+    });
+  });
+});
+
 describe('assertSameEmbeddingSpace', () => {
   it('returns the shared space for identical strings', () => {
     expect(assertSameEmbeddingSpace(SPACE, SPACE)).toBe(SPACE);
