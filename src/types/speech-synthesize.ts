@@ -141,4 +141,31 @@ export interface SpeechSynthesizeResult {
   /** Worker-measured; `null` if unreported. */
   wallMs: number | null;
   warnings: SpeechWarning[];
+
+  /**
+   * Word timing for read-along: when each word is heard and its
+   * [charStart, charEnd) span in the text as sent (NFC, trimmed). Carries no
+   * word text: the result never echoes the input. `null` (or absent, from an
+   * older platform) when no timing was established.
+   */
+  words?: SpeechWordTiming[] | null;
+  /** How `words` was established; `null` exactly when `words` is. */
+  timing?: SpeechTimingProvenance | null;
+}
+
+/** One spoken word of the synthesized audio. */
+export interface SpeechWordTiming {
+  startMs: number;
+  endMs: number;
+  charStart: number;
+  charEnd: number;
+}
+
+/** `engine`: the engine's own timestamps (kokoro). `aligned`: a forced alignment of the text to the audio. */
+export interface SpeechTimingProvenance {
+  source: 'engine' | 'aligned';
+  /** The aligner model for `aligned`; null for engine timing. */
+  model: string | null;
+  /** Mean per-character alignment probability; null when not measured. */
+  confidence: number | null;
 }

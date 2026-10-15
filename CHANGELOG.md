@@ -10,7 +10,11 @@
 - `client.capabilities.cancel(runId)` for the existing
   `POST /v1/capabilities/capability-runs/:runId/cancel`. It marks the run and
   cancels its workflow run best-effort.
-
+- `speech:synthesize` results carry word timing for read-along: `words`
+  (`SpeechWordTiming[]`: `startMs`, `endMs`, `charStart`, `charEnd` in the text
+  as sent; no word text) and `timing` (`SpeechTimingProvenance`: `engine` or
+  `aligned`, the aligner model, a confidence). Optional and nullable: absent
+  from older platforms, `null` when no timing was established.
 - `speech:synthesize` third engine `qwen3-tts` (Qwen3-TTS 1.7B Base, voice
   cloning). `SpeechEngine` gains `'qwen3-tts'`; `SpeechSynthesizeInput` gains
   `referenceText` (the exact transcript of the reference recording). For
