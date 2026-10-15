@@ -1,8 +1,8 @@
 /**
- * Direct inference: embeddings, rerank and chat completions.
+ * Direct inference: embeddings, rerank, chat completions and audio transcription.
  *
  * Wire shapes for the model-router public endpoints `POST /v1/embeddings`,
- * `POST /v1/rerank` and `POST /v1/chat/completions`. Field names are kept exactly as they appear on the wire
+ * `POST /v1/rerank`, `POST /v1/chat/completions` and `POST /v1/audio/transcriptions`. Field names are kept exactly as they appear on the wire
  * (snake_case) so these types can be used to type raw responses.
  *
  * Provenance (`whizai`) is optional everywhere: older, non-fleet embedding
@@ -418,5 +418,127 @@ export interface ChatCallOptions {
   /** Sent as `x-priority` (e.g. `interactive`, `batch`); the gateway checks it against the app's policy. */
   priority?: string;
   /** Request timeout for this call, in ms. Defaults to the client timeout. */
+  timeoutMs?: number;
+}
+
+// =============================================================================
+// AUDIO TRANSCRIPTION — POST /v1/audio/transcriptions
+// =============================================================================
+//
+// Served by model-router (`AudioTranscriptionRequest` /
+// `AudioTranscriptionResponse` in services/model-router/src/models.py).
+// The response model has no `whizai` or `execution` block: attribution is
+// limited to `provider` and `model`.
+
+/** Output format. The server default is `verbose_json` (with segments). */
+export type TranscriptionResponseFormat = 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt';
+
+/** Timestamp granularity levels. Server default `['segment']`. */
+export type TranscriptionTimestampGranularity = 'word' | 'segment';
+
+/** Wire request body. Exactly one of `file`, `file_url`, `artifact_id`. */
+export interface AudioTranscriptionRequest {
+  /** Base64-encoded audio (a `data:` URL is accepted). */
+  file?: string;
+  /** URL of the audio file. */
+  file_url?: string;
+  /**
+   * A platform artifact holding the audio, ownership-checked against the
+   * caller's app. Requires fleet dispatch; cannot expire while queued.
+   */
+  artifact_id?: string;
+  /** Whisper model. Unset = the provider's own whisper (the fleet's is `whisper-large-v3-turbo`). */
+  model?: string;
+  /** Unset = the router chooses. Pinning a provider fails closed if it is unavailable. */
+  provider?: string;
+  /** `auto` (or unset) lets the router choose. */
+  backend?: string;
+  /** ISO-639-1 code (e.g. `en`). Auto-detected when unset. */
+  language?: string;
+  /** Style/vocabulary hint, at most 224 characters. */
+  prompt?: string;
+  response_format?: TranscriptionResponseFormat;
+  /** 0..1. Server default 0. */
+  temperature?: number;
+  timestamp_granularities?: TranscriptionTimestampGranularity[];
+  /**
+   * Execution controls, as on chat: `executionPolicy`, `priority`,
+   * `idempotencyKey`, `deadlineSeconds`, `timeoutMs`. Tenancy comes from the
+   * authenticated key.
+   */
+  metadata?: Record<string, unknown>;
+}
+
+export interface TranscriptionSegment {
+  text: string;
+  /** Seconds. */
+  start: number;
+  /** Seconds. */
+  end: number;
+  /** 0..1 (converted from Whisper's `avg_logprob`), or `null`/absent when unknown. */
+  confidence?: number | null;
+}
+
+/** `200` body of `POST /v1/audio/transcriptions`. */
+export interface AudioTranscriptionResponse {
+  /** Full transcribed text. */
+  text: string;
+  /** Detected or requested ISO-639-1 code. */
+  language?: string | null;
+  /** Audio duration in seconds. */
+  duration?: number | null;
+  /** Present for `verbose_json`. */
+  segments?: TranscriptionSegment[] | null;
+  /** Provider that served it (model-router `ProviderType`, e.g. `vllm`, `openai`). */
+  provider: string;
+  /** Model that served it. */
+  model: string;
+  request_id: string;
+}
+
+/**
+ * `202` body: with `metadata.idempotencyKey`, a transcription still owed after
+ * the router's wait returns this. Re-send the same request to re-attach.
+ */
+export interface AudioTranscriptionPending {
+  jobId: string;
+  state: string;
+}
+
+/** Parameters for {@link WhizuraiClient.transcribe} (camelCase, mapped to the wire). */
+export interface TranscribeParams {
+  /** URL of the audio. Exactly one of `fileUrl`, `file`, `artifactId`. */
+  fileUrl?: string;
+  /** Base64-encoded audio (or a `data:` URL). */
+  file?: string;
+  /** A platform artifact owned by the calling app (fleet dispatch only). */
+  artifactId?: string;
+  /** e.g. `whisper-large-v3-turbo`. Unset = the provider's own whisper. */
+  model?: string;
+  /** ISO-639-1, e.g. `en`. */
+  language?: string;
+  /** Style/vocabulary hint, at most 224 characters. */
+  prompt?: string;
+  /** Server default `verbose_json`. */
+  responseFormat?: TranscriptionResponseFormat;
+  /** 0..1. Server default 0. */
+  temperature?: number;
+  timestampGranularities?: TranscriptionTimestampGranularity[];
+  /** Pin a provider; an unavailable provider fails closed. */
+  provider?: ChatProvider;
+  /** Execution controls (`priority`, `executionPolicy`, `idempotencyKey`, `deadlineSeconds`). */
+  metadata?: Record<string, unknown>;
+}
+
+/** Per-call options for {@link WhizuraiClient.transcribe}. Same headers as chat. */
+export interface TranscribeCallOptions {
+  /** Sent as `x-execution-policy`. */
+  executionPolicy?: ExecutionPolicy;
+  /** Sent as `x-priority` (e.g. `production`, `batch`); checked against the app's policy. */
+  priority?: string;
+  /**
+   * Request timeout for this call, in ms. Also sent as `x-request-timeout-ms`
+   * so the router cancels the job (and frees its slot) when the caller gives up.
+   */
   timeoutMs?: number;
 }

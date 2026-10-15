@@ -15,7 +15,9 @@ import {
   ValidationError,
   RateLimitError,
   WhizuraiError,
+  SPEECH_SYNTHESIZE,
 } from '../src/index';
+import type { SpeechSynthesizeInput, SpeechSynthesizeResult } from '../src/index';
 
 jest.mock('axios');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -120,6 +122,37 @@ describe('capabilities', () => {
       { headers: { 'x-idempotency-key': 'k1' } }
     );
     expect(run.id).toBe('r1');
+  });
+
+  it('run() passes a qwen3-tts speech input through unchanged', async () => {
+    mockHttp.post.mockResolvedValue({ data: { run: { id: 'r2', status: 'pending' } } });
+    const input: SpeechSynthesizeInput = {
+      text: 'Chapter one.',
+      engine: 'qwen3-tts',
+      referenceAudioArtifactId: 'art-ref',
+      referenceText: 'The exact words spoken in the reference recording.',
+      seed: 7,
+      priority: 'production',
+    };
+    await client.capabilities.run(SPEECH_SYNTHESIZE, { ...input });
+    expect(mockHttp.post).toHaveBeenCalledWith(
+      '/v1/capabilities/speech%3Asynthesize/execute',
+      { input },
+      { headers: {} }
+    );
+
+    // The result type carries the reference identity fields (nullable).
+    const result: Pick<
+      SpeechSynthesizeResult,
+      'servedEngine' | 'servedVoice' | 'watermark' | 'referenceAudioSha256' | 'referenceTextSha256'
+    > = {
+      servedEngine: 'qwen3-tts',
+      servedVoice: 'reference',
+      watermark: null,
+      referenceAudioSha256: 'a'.repeat(64),
+      referenceTextSha256: null,
+    };
+    expect(result.servedEngine).toBe('qwen3-tts');
   });
 
   it('cancel() posts to the capability-run cancel route', async () => {

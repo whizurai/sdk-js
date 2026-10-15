@@ -1,13 +1,13 @@
 /**
- * Direct inference — `POST /v1/embeddings`, `POST /v1/rerank` and
- * `POST /v1/chat/completions`.
+ * Direct inference — `POST /v1/embeddings`, `POST /v1/rerank`,
+ * `POST /v1/chat/completions` and `POST /v1/audio/transcriptions`.
  *
  * These are served by model-router, not the api-gateway at `baseUrl`, so they
  * use their own HTTP client bound to `inferenceBaseUrl`. model-router accepts
  * the same WhizAI API key (`X-API-Key` or `Authorization: Bearer`), which it
  * verifies with the gateway.
  *
- * Exposed as `client.embed()` / `client.rerank()` / `client.chat()`. Responses are returned in
+ * Exposed as `client.embed()` / `client.rerank()` / `client.chat()` / `client.transcribe()`. Responses are returned in
  * their wire shape (snake_case), including the optional `whizai` provenance
  * block, so they line up with `@whizurai/types/inference`.
  */
@@ -20,6 +20,9 @@ import {
   ChatCompletionRequest,
   ChatCompletionResponse,
   ChatParams,
+  AudioTranscriptionPending,
+  AudioTranscriptionRequest,
+  AudioTranscriptionResponse,
   DegradedRerankResponse,
   EmbedParams,
   EmbeddingsRequest,
@@ -30,6 +33,8 @@ import {
   RerankParams,
   RerankRequest,
   RerankResponse,
+  TranscribeCallOptions,
+  TranscribeParams,
 } from '../types';
 
 function requireModel(
@@ -84,9 +89,9 @@ export class InferenceResource {
     const baseUrl = this.config.inferenceBaseUrl;
     if (!baseUrl) {
       throw new WhizuraiError(
-        'embed()/rerank()/chat() require `inferenceBaseUrl` (the model-router URL, e.g. ' +
+        'embed()/rerank()/chat()/transcribe() require `inferenceBaseUrl` (the model-router URL, e.g. ' +
           "'https://model-router.staging.whizur.ai'). The gateway `baseUrl` does not serve " +
-          '/v1/embeddings, /v1/rerank or /v1/chat/completions.',
+          '/v1/embeddings, /v1/rerank, /v1/chat/completions or /v1/audio/transcriptions.',
         'INFERENCE_BASE_URL_REQUIRED'
       );
     }
@@ -116,10 +121,17 @@ export class InferenceResource {
     body: unknown,
     config?: { timeout?: number; headers?: Record<string, string> }
   ): Promise<unknown> {
+    return (await this.postRaw(path, body, config)).data;
+  }
+
+  private async postRaw(
+    path: string,
+    body: unknown,
+    config?: { timeout?: number; headers?: Record<string, string> }
+  ): Promise<{ status?: number; data: unknown }> {
     const http = this.http();
     try {
-      const res = await http.post(path, body, config);
-      return res.data;
+      return await http.post(path, body, config);
     } catch (error) {
       throw this.withConfigHint(error);
     }
@@ -221,5 +233,70 @@ export class InferenceResource {
       body,
       Object.keys(config).length > 0 ? config : undefined
     )) as ChatCompletionResponse;
+  }
+
+  /**
+   * Transcribe audio (`POST /v1/audio/transcriptions`). Exactly one of
+   * `fileUrl`, `file` (base64) or `artifactId`. Attribution is the response's
+   * `provider` and `model` only.
+   *
+   * A `202` (only possible with `metadata.idempotencyKey`) is not a result: it
+   * rejects with a `WhizuraiError` whose code is `TRANSCRIPTION_PENDING` and
+   * whose `details` carry `{ jobId, state }`. Re-send the same request to
+   * re-attach.
+   */
+  async transcribe(
+    params: TranscribeParams,
+    options: TranscribeCallOptions = {}
+  ): Promise<AudioTranscriptionResponse> {
+    const sources = (['fileUrl', 'file', 'artifactId'] as const).filter((k) => {
+      const v = params?.[k];
+      return typeof v === 'string' && v !== '';
+    });
+    if (sources.length !== 1) {
+      throw new ValidationError(
+        'transcribe() requires exactly one of `fileUrl`, `file` (base64) or `artifactId`' +
+          (sources.length > 1 ? ` (got ${sources.join(', ')}).` : '.'),
+        'AUDIO_SOURCE_REQUIRED'
+      );
+    }
+
+    const body: AudioTranscriptionRequest = {};
+    if (params.fileUrl) body.file_url = params.fileUrl;
+    if (params.file) body.file = params.file;
+    if (params.artifactId) body.artifact_id = params.artifactId;
+    if (params.model !== undefined) body.model = params.model;
+    if (params.language !== undefined) body.language = params.language;
+    if (params.prompt !== undefined) body.prompt = params.prompt;
+    if (params.responseFormat !== undefined) body.response_format = params.responseFormat;
+    if (params.temperature !== undefined) body.temperature = params.temperature;
+    if (params.timestampGranularities !== undefined) body.timestamp_granularities = params.timestampGranularities;
+    if (params.provider !== undefined) body.provider = params.provider;
+    if (params.metadata !== undefined) body.metadata = params.metadata;
+
+    const headers: Record<string, string> = {};
+    if (options.executionPolicy) headers['x-execution-policy'] = options.executionPolicy;
+    if (options.priority) headers['x-priority'] = options.priority;
+    if (options.timeoutMs !== undefined) headers['x-request-timeout-ms'] = String(options.timeoutMs);
+    const config: { timeout?: number; headers?: Record<string, string> } = {};
+    if (options.timeoutMs !== undefined) config.timeout = options.timeoutMs;
+    if (Object.keys(headers).length > 0) config.headers = headers;
+
+    const res = await this.postRaw(
+      '/v1/audio/transcriptions',
+      body,
+      Object.keys(config).length > 0 ? config : undefined
+    );
+    if (res.status === 202) {
+      const pending = res.data as AudioTranscriptionPending;
+      throw new WhizuraiError(
+        `Transcription still running (job ${pending?.jobId}, state ${pending?.state}); ` +
+          're-send the same request to re-attach.',
+        'TRANSCRIPTION_PENDING',
+        202,
+        pending
+      );
+    }
+    return res.data as AudioTranscriptionResponse;
   }
 }

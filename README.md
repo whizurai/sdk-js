@@ -295,17 +295,51 @@ processImage().catch(console.error);
 > instead — capabilities wrap those primitives with validation, routing, and
 > artifact tracking.
 
-## Embeddings, Rerank and Chat
+## Speech synthesis
 
-Direct inference against `POST /v1/embeddings`, `POST /v1/rerank` and
-`POST /v1/chat/completions` (see [Chat completions](#chat-completions)).
+`speech:synthesize` is a capability, so it runs through `capabilities.run`; the
+audio comes back as an artifact. Input and result are typed
+(`SpeechSynthesizeInput`, `SpeechSynthesizeResult`).
+
+| Engine | Voice | Engine-only options | Watermark |
+|---|---|---|---|
+| `kokoro` | `voice` preset (required) | `speed` | `null` |
+| `chatterbox` | default, or `referenceAudioArtifactId` | `exaggeration`, `cfgWeight` | `perth` |
+| `qwen3-tts` | `referenceAudioArtifactId` **and** `referenceText` (both required) | none | `null` |
+
+`seed` and `priority` are accepted for every engine. The platform refuses an
+option an engine does not take (400 `invalid_option`); the SDK does not
+pre-validate.
+
+```typescript
+import { SPEECH_SYNTHESIZE, type SpeechSynthesizeInput } from '@whizurai/sdk-js';
+
+const input: SpeechSynthesizeInput = {
+  text: 'Chapter one.',
+  engine: 'qwen3-tts',
+  referenceAudioArtifactId: refArtifactId,
+  referenceText: 'The exact words spoken in the reference recording.',
+  priority: 'production',
+};
+const { run } = await client.capabilities.run(SPEECH_SYNTHESIZE, { ...input });
+```
+
+The result's `referenceAudioSha256` / `referenceTextSha256` are what the worker
+actually conditioned on (`null` when no reference was used; never `null` for
+`qwen3-tts`). Compare them with what you sent before trusting the voice.
+
+## Embeddings, Rerank, Chat and Transcription
+
+Direct inference against `POST /v1/embeddings`, `POST /v1/rerank`,
+`POST /v1/chat/completions` (see [Chat completions](#chat-completions)) and
+`POST /v1/audio/transcriptions` (see [Transcription](#transcription)).
 Responses keep their wire shape (snake_case), including the optional `whizai`
 provenance block.
 
 These endpoints are served by **model-router**, not the api-gateway at
 `baseUrl`, so set `inferenceBaseUrl`. The same `apiKey` authenticates there
 (sent as `X-API-Key` and `Authorization: Bearer`; model-router verifies it with
-the gateway). Without `inferenceBaseUrl`, `embed()`/`rerank()`/`chat()` throw
+the gateway). Without `inferenceBaseUrl`, `embed()`/`rerank()`/`chat()`/`transcribe()` throw
 `WhizuraiError` with code `INFERENCE_BASE_URL_REQUIRED`.
 
 ```typescript
@@ -441,6 +475,35 @@ res.execution?.resolution;      // alias -> family -> model -> worker; absent = 
 - The response has no `whizai` block (unlike embed/rerank): attribution is
   `execution` (`execution`, `runtime`, `fleet_job_id`, `resolution`).
 - Non-streaming only; `stream: true` is not supported by `chat()`.
+
+### Transcription
+
+`client.transcribe(params, options?)` calls model-router's
+`POST /v1/audio/transcriptions`. Give exactly one of `fileUrl`, `file` (base64)
+or `artifactId`; otherwise it throws `ValidationError` (`AUDIO_SOURCE_REQUIRED`).
+
+```typescript
+const res = await client.transcribe(
+  { fileUrl, language: 'en', responseFormat: 'json', model: 'whisper-large-v3-turbo' },
+  { priority: 'production', timeoutMs: 120_000 }
+);
+
+res.text;     // full transcript
+res.model;    // model that served it
+res.provider; // provider that served it, e.g. 'vllm'
+```
+
+- camelCase maps to the wire (`fileUrl` → `file_url`, `artifactId` →
+  `artifact_id`, `responseFormat` → `response_format`,
+  `timestampGranularities` → `timestamp_granularities`); unset fields are not
+  sent. The server's default `responseFormat` is `verbose_json` (with `segments`).
+- `options` sends `x-execution-policy`, `x-priority` and, with `timeoutMs`,
+  `x-request-timeout-ms`, so the router drops the job when you stop waiting.
+- With `metadata.idempotencyKey`, a transcription still running after the
+  router's wait answers `202`; `transcribe()` rejects with code
+  `TRANSCRIPTION_PENDING` and `details: { jobId, state }`. Re-send the same
+  request to re-attach.
+- Attribution is `provider` and `model` only; there is no `execution` block.
 
 ### Legacy `EmbeddingsClient`
 
