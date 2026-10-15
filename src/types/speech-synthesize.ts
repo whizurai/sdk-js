@@ -13,8 +13,11 @@
 /** Capability slug, for `client.capabilities.run(...)`. */
 export const SPEECH_SYNTHESIZE = 'speech:synthesize' as const;
 
-/** Engines available at launch. */
-export type SpeechEngine = 'kokoro' | 'chatterbox';
+/**
+ * Engines. `qwen3-tts` (Qwen3-TTS 1.7B Base) clones a voice from a reference
+ * recording plus its exact transcript; it has no preset voices.
+ */
+export type SpeechEngine = 'kokoro' | 'chatterbox' | 'qwen3-tts';
 
 /**
  * Fleet priority class. `interactive` is deliberately absent: a call over
@@ -36,25 +39,33 @@ export interface SpeechSynthesizeInput {
   /** Which engine renders the speech. */
   engine: SpeechEngine;
 
-  /** kokoro: REQUIRED preset id, e.g. `af_heart`. chatterbox: not accepted. */
+  /** kokoro: REQUIRED preset id, e.g. `af_heart`. chatterbox, qwen3-tts: not accepted. */
   voice?: string;
 
   /**
-   * chatterbox: optional reference voice, an artifact id owned by the calling
-   * app. kokoro: not accepted. The platform checks ownership and format only.
+   * Reference voice, an artifact id owned by the calling app. chatterbox:
+   * optional. qwen3-tts: REQUIRED. kokoro: not accepted. The platform checks
+   * ownership and format only.
    */
   referenceAudioArtifactId?: string;
 
-  /** kokoro only. 0.5 to 2. */
+  /**
+   * qwen3-tts: REQUIRED. The exact transcript of the reference recording,
+   * 1-2000 characters, NFC-normalised by the platform. kokoro, chatterbox:
+   * not accepted (`invalid_option`).
+   */
+  referenceText?: string;
+
+  /** kokoro only (not accepted for chatterbox or qwen3-tts). 0.5 to 2. */
   speed?: number;
 
-  /** chatterbox only. 0.25 to 2. */
+  /** chatterbox only (not accepted for kokoro or qwen3-tts). 0.25 to 2. */
   exaggeration?: number;
 
-  /** chatterbox only. 0 to 1. */
+  /** chatterbox only (not accepted for kokoro or qwen3-tts). 0 to 1. */
   cfgWeight?: number;
 
-  /** Best effort; the result reports `seedApplied`. Integer 0 to 2147483647. */
+  /** All engines. Best effort; the result reports `seedApplied`. Integer 0 to 2147483647. */
   seed?: number;
 
   /** Fleet class for this call. */
@@ -92,9 +103,12 @@ export interface SpeechSynthesizeResult {
   bitDepth: 16;
 
   servedEngine: SpeechEngine;
-  /** `af_heart`-style preset, `chatterbox-default`, or `reference`. */
+  /**
+   * `af_heart`-style preset, `chatterbox-default`, or `reference` (chatterbox
+   * with a reference, and always for qwen3-tts).
+   */
   servedVoice: string;
-  /** The model id the runtime reported, e.g. `kokoro-82m`. */
+  /** The model id the runtime reported, e.g. `kokoro-82m`, `qwen3-tts-1.7b-base`. */
   servedModel: string;
   /** `null` when the worker declared none. */
   modelRevision: string | null;
@@ -102,12 +116,25 @@ export interface SpeechSynthesizeResult {
   runtime: string;
   /** Observed by the server; free string. `null` when unknown. */
   deviceObserved: string | null;
-  /** `perth` for chatterbox output, otherwise `null`. */
+  /** `perth` for chatterbox output, otherwise `null` (kokoro, qwen3-tts). */
   watermark: 'perth' | null;
   /** `null` when no seed was applied. */
   seedApplied: number | null;
   /** `false` when `modelRevision` or the device is unknown. */
   attributable: boolean;
+
+  /**
+   * Lowercase hex SHA-256 of the reference audio bytes the worker actually
+   * conditioned on, computed by the worker. `null` when no reference was used
+   * (or the worker predates this field). Never `null` for qwen3-tts: the
+   * platform refuses that commit with `output_unverifiable`.
+   */
+  referenceAudioSha256: string | null;
+  /**
+   * Lowercase hex SHA-256 of the UTF-8 reference transcript the worker used
+   * (after NFC). `null` when none. Never `null` for qwen3-tts.
+   */
+  referenceTextSha256: string | null;
 
   jobId: string;
   inputChars: number;
