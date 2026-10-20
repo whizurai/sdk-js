@@ -351,6 +351,42 @@ timestamps) or `aligned` (forced alignment, with the aligner `model` and a
 `confidence`). Both are `null`, or absent on an older platform, when no timing
 was established, so render plain text in that case.
 
+## Text generation and image description (gateway)
+
+`generateText()` and `describeImage()` call the api-gateway at `baseUrl` (no
+`inferenceBaseUrl` needed). The gateway takes your app from the API key and
+runs the request on the WhizAI fleet under your app's policy, so declare a
+scheduling class on every call: `interactive` only where a person is waiting
+(and your policy grants it), `production` for live product work, `batch` for
+pipelines.
+
+```typescript
+const text = await client.generateText({
+  prompt: 'Suggest a caption for a corgi in a raincoat',
+  model: 'chat',
+  reasoningEffort: 'none',
+  maxTokens: 200,
+  metadata: { priority: 'interactive', timeoutMs: 60_000 },
+});
+console.log(text.choices[0].text, text.model, text.execution);
+
+const scene = await client.describeImage(
+  {
+    image: base64Bytes, // or imageUrl, never both
+    prompt: 'Describe the subject and setting as JSON.',
+    model: 'qwen3-vl:30b-a3b-instruct', // omitted: the `vision` alias
+    metadata: { priority: 'interactive', timeoutMs: 315_000 },
+  },
+  { timeoutMs: 330_000 } // HTTP timeout; keep it above metadata.timeoutMs
+);
+console.log(scene.description, scene.model);
+```
+
+- Read the served model from the response's `model`, never from your request.
+- `metadata` carries scheduling only; the gateway drops any identity fields.
+- Use `describeImage()` when you need a synchronous answer about the exact bytes
+  you hold; use the `image:describe` capability for tracked, async runs.
+
 ## Embeddings, Rerank, Chat and Transcription
 
 Direct inference against `POST /v1/embeddings`, `POST /v1/rerank`,

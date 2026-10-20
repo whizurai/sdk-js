@@ -27,10 +27,16 @@ import { RunsResource } from './resources/runs';
 import { ArtifactsResource } from './resources/artifacts';
 import { TriggersResource } from './resources/triggers';
 import { InferenceResource } from './resources/inference';
+import { GatewayInferenceResource } from './resources/gateway-inference';
 import {
   ChatCallOptions,
   ChatCompletionResponse,
   ChatParams,
+  DescribeImageRequest,
+  DescribeImageResponse,
+  GatewayCallOptions,
+  GenerateTextRequest,
+  GenerateTextResponse,
   AudioTranscriptionResponse,
   TranscribeCallOptions,
   TranscribeParams,
@@ -57,6 +63,7 @@ export class WhizuraiClient {
 
   private readonly _http: AxiosInstance;
   private readonly _inference: InferenceResource;
+  private readonly _gatewayInference: GatewayInferenceResource;
   private readonly _config: Required<Omit<WhizuraiConfig, 'inferenceBaseUrl'>> & {
     inferenceBaseUrl?: string;
   };
@@ -78,6 +85,29 @@ export class WhizuraiClient {
     this.artifacts = new ArtifactsResource(this._http);
     this.triggers = new TriggersResource(this._http);
     this._inference = new InferenceResource(this._config);
+    this._gatewayInference = new GatewayInferenceResource(this._http);
+  }
+
+  /**
+   * Generate text through the gateway (`POST /v1/generate/text` at `baseUrl`).
+   * The gateway takes the app from the key and leases the work on the fleet
+   * under that app's policy: declare `metadata.priority`. Omitted `model` is
+   * `chat`, fleet-required. The served model is the response's `model`, and
+   * `execution` says where it ran (absent = unattributed).
+   */
+  generateText(params: GenerateTextRequest, options?: GatewayCallOptions): Promise<GenerateTextResponse> {
+    return this._gatewayInference.generateText(params, options);
+  }
+
+  /**
+   * Describe an image through the gateway (`POST /v1/images/describe` at
+   * `baseUrl`). Exactly one of `image` (base64) or `imageUrl`. Synchronous and
+   * byte-exact, unlike the `image:describe` capability. `model` names an exact
+   * model routed to whichever fleet worker holds it; omitted, the `vision`
+   * alias runs. Local vision models can be slow: set `options.timeoutMs`.
+   */
+  describeImage(params: DescribeImageRequest, options?: GatewayCallOptions): Promise<DescribeImageResponse> {
+    return this._gatewayInference.describeImage(params, options);
   }
 
   /**
@@ -154,6 +184,7 @@ export { ArtifactsResource } from './resources/artifacts';
 export type { ListArtifactsOptions } from './resources/artifacts';
 export { TriggersResource } from './resources/triggers';
 export { InferenceResource, rerankDegradeReason } from './resources/inference';
+export { GatewayInferenceResource } from './resources/gateway-inference';
 
 // Embedding-space guard.
 export {

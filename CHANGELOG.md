@@ -4,6 +4,19 @@
 
 ### Added
 
+- `client.generateText(params, options?)` for the gateway's
+  `POST /v1/generate/text` and `client.describeImage(params, options?)` for
+  `POST /v1/images/describe`. Both go to `baseUrl` (the api-gateway), not
+  model-router: the gateway takes the app from the key, rate-limits, and leases
+  the work on the fleet under that app's policy. Declare `metadata.priority`
+  (`interactive` only where a person waits and the app's policy grants it).
+  `describeImage` takes exactly one of `image` (base64) or `imageUrl`; `model`
+  names an exact model, omitted runs the `vision` alias. `options.timeoutMs`
+  sets the HTTP timeout for that call. Responses are the wire shape. Types:
+  `GenerateTextRequest`, `GenerateTextResponse`, `GenerateTextExecution`,
+  `DescribeImageRequest`, `DescribeImageResponse`, `GatewayRequestMetadata`,
+  `GatewayCallOptions`, `PriorityClass`, `GatewayReasoningEffort`
+  (mirroring `@whizurai/types/gateway-inference` 1.4.0).
 - Typed `speech:synthesize` shapes: `SPEECH_SYNTHESIZE`, `SpeechSynthesizeInput`,
   `SpeechSynthesizeResult`, `SpeechEngine`, `SpeechPriority`, `SpeechWarning`.
   No new endpoint: run it with `client.capabilities.run(SPEECH_SYNTHESIZE, input)`.
