@@ -375,3 +375,4 @@ export interface StatusResponse {
 export * from './video-multi-shot';
 export * from './speech-synthesize';
 export * from './inference';
+export * from './gateway-inference';
