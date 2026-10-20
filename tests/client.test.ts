@@ -35,7 +35,6 @@ const mockHttp = {
       }),
     },
   },
-  defaults: { baseURL: 'http://localhost:3000' },
   get: jest.fn(),
   post: jest.fn(),
   put: jest.fn(),
