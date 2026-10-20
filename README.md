@@ -344,6 +344,13 @@ The result's `referenceAudioSha256` / `referenceTextSha256` are what the worker
 actually conditioned on (`null` when no reference was used; never `null` for
 `qwen3-tts`). Compare them with what you sent before trusting the voice.
 
+`words` and `timing` give word timing for read-along: each word's `startMs` /
+`endMs` in the audio and its `[charStart, charEnd)` span in the text as sent.
+They carry no word text. `timing.source` is `engine` (the engine's own
+timestamps) or `aligned` (forced alignment, with the aligner `model` and a
+`confidence`). Both are `null`, or absent on an older platform, when no timing
+was established, so render plain text in that case.
+
 ## Embeddings, Rerank, Chat and Transcription
 
 Direct inference against `POST /v1/embeddings`, `POST /v1/rerank`,
