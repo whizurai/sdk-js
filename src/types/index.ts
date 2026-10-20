@@ -11,7 +11,7 @@
 export interface WhizuraiConfig {
   /** API key (sk_live_… / sk_test_…). Sent as `X-API-Key` and `Authorization: Bearer`. */
   apiKey: string;
-  /** Base URL of the platform gateway. Defaults to https://api.whizurai.com */
+  /** Base URL of the platform gateway. Defaults to https://api.whizur.ai */
   baseUrl?: string;
   /** Per-request timeout in ms. Default: 30_000 */
   timeout?: number;
