@@ -15,7 +15,9 @@ import {
   ValidationError,
   RateLimitError,
   WhizuraiError,
+  SPEECH_SYNTHESIZE,
 } from '../src/index';
+import type { SpeechSynthesizeInput, SpeechSynthesizeResult } from '../src/index';
 
 jest.mock('axios');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -24,6 +26,7 @@ const axios = require('axios');
 let responseErrorInterceptor: (err: AxiosError) => unknown;
 
 const mockHttp = {
+  defaults: { baseURL: 'http://localhost:3000' },
   interceptors: {
     request: { use: jest.fn() },
     response: {
@@ -32,7 +35,6 @@ const mockHttp = {
       }),
     },
   },
-  defaults: { baseURL: 'http://localhost:3000' },
   get: jest.fn(),
   post: jest.fn(),
   put: jest.fn(),
@@ -162,6 +164,44 @@ describe('capabilities', () => {
       { webhookUrl: 'https://a.example/hook', runFlags: { callbackUrl: 'https://b.example/hook' } }
     );
     expect(mockHttp.post.mock.calls[1][1].runFlags).toEqual({ callbackUrl: 'https://b.example/hook' });
+  });
+
+  it('run() passes a qwen3-tts speech input through unchanged', async () => {
+    mockHttp.post.mockResolvedValue({ data: { run: { id: 'r2', status: 'pending' } } });
+    const input: SpeechSynthesizeInput = {
+      text: 'Chapter one.',
+      engine: 'qwen3-tts',
+      referenceAudioArtifactId: 'art-ref',
+      referenceText: 'The exact words spoken in the reference recording.',
+      seed: 7,
+      priority: 'production',
+    };
+    await client.capabilities.run(SPEECH_SYNTHESIZE, { ...input });
+    expect(mockHttp.post).toHaveBeenCalledWith(
+      '/v1/capabilities/speech%3Asynthesize/execute',
+      { input },
+      { headers: {} }
+    );
+
+    // The result type carries the reference identity fields (nullable).
+    const result: Pick<
+      SpeechSynthesizeResult,
+      'servedEngine' | 'servedVoice' | 'watermark' | 'referenceAudioSha256' | 'referenceTextSha256'
+    > = {
+      servedEngine: 'qwen3-tts',
+      servedVoice: 'reference',
+      watermark: null,
+      referenceAudioSha256: 'a'.repeat(64),
+      referenceTextSha256: null,
+    };
+    expect(result.servedEngine).toBe('qwen3-tts');
+  });
+
+  it('cancel() posts to the capability-run cancel route', async () => {
+    mockHttp.post.mockResolvedValue({ data: { id: 'r1', status: 'cancelled' } });
+    const res = await client.capabilities.cancel('r1');
+    expect(mockHttp.post).toHaveBeenCalledWith('/v1/capabilities/capability-runs/r1/cancel');
+    expect(res.status).toBe('cancelled');
   });
 
   it('dryRun() derives valid from status', async () => {

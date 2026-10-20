@@ -1,5 +1,50 @@
 # Changelog
 
+## 3.3.0 (unreleased)
+
+### Added
+
+- Typed `speech:synthesize` shapes: `SPEECH_SYNTHESIZE`, `SpeechSynthesizeInput`,
+  `SpeechSynthesizeResult`, `SpeechEngine`, `SpeechPriority`, `SpeechWarning`.
+  No new endpoint: run it with `client.capabilities.run(SPEECH_SYNTHESIZE, input)`.
+- `client.capabilities.cancel(runId)` for the existing
+  `POST /v1/capabilities/capability-runs/:runId/cancel`. It marks the run and
+  cancels its workflow run best-effort.
+- `speech:synthesize` results carry word timing for read-along: `words`
+  (`SpeechWordTiming[]`: `startMs`, `endMs`, `charStart`, `charEnd` in the text
+  as sent; no word text) and `timing` (`SpeechTimingProvenance`: `engine` or
+  `aligned`, the aligner model, a confidence). Optional and nullable: absent
+  from older platforms, `null` when no timing was established.
+- `speech:synthesize` third engine `qwen3-tts` (Qwen3-TTS 1.7B Base, voice
+  cloning). `SpeechEngine` gains `'qwen3-tts'`; `SpeechSynthesizeInput` gains
+  `referenceText` (the exact transcript of the reference recording). For
+  `qwen3-tts`, `referenceAudioArtifactId` and `referenceText` are required and
+  `voice`, `speed`, `exaggeration`, `cfgWeight` are refused; `referenceText` is
+  refused for the other engines. The platform enforces this (400
+  `invalid_option`); the SDK does not validate capability input.
+- `SpeechSynthesizeResult` gains `referenceAudioSha256` and
+  `referenceTextSha256` (`string | null`): hashes of the reference audio and
+  transcript the worker actually used. `null` when no reference was used;
+  never `null` for `qwen3-tts`. `servedVoice` is `reference` and `watermark` is
+  `null` for `qwen3-tts`.
+- `client.transcribe(params, options?)` for model-router's
+  `POST /v1/audio/transcriptions` (needs `inferenceBaseUrl`). Exactly one of
+  `fileUrl`, `file` (base64) or `artifactId`; `model`, `language`, `prompt`,
+  `responseFormat`, `temperature`, `timestampGranularities`, `provider`,
+  `metadata` map to the snake_case wire. `options` sends `x-execution-policy`,
+  `x-priority` and `x-request-timeout-ms` like `chat()`. A `202` (only with
+  `metadata.idempotencyKey`) rejects with code `TRANSCRIPTION_PENDING` and
+  `details: { jobId, state }`. Types: `TranscribeParams`,
+  `TranscribeCallOptions`, `AudioTranscriptionRequest`,
+  `AudioTranscriptionResponse`, `AudioTranscriptionPending`,
+  `TranscriptionSegment`, `TranscriptionResponseFormat`.
+
+### Fixed
+
+- `SPEECH_SYNTHESIZE` and `VIDEO_MULTI_SHOT` are now exported as values from
+  the package root. They were only reachable as types (`export type *`), so
+  `capabilities.run(SPEECH_SYNTHESIZE, ...)` did not compile against 3.2.0.
+
 ## 3.2.1
 
 ### Fixed
