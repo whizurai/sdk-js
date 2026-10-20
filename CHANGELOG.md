@@ -41,6 +41,9 @@
 
 ### Fixed
 
+- The default `baseUrl` is now `https://api.whizur.ai`. It was
+  `https://api.whizurai.com`, which does not resolve, so a client created without
+  `baseUrl` could not connect.
 - `SPEECH_SYNTHESIZE` and `VIDEO_MULTI_SHOT` are now exported as values from
   the package root. They were only reachable as types (`export type *`), so
   `capabilities.run(SPEECH_SYNTHESIZE, ...)` did not compile against 3.2.0.

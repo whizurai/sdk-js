@@ -19,7 +19,7 @@ import { WhizuraiClient } from '@whizurai/sdk-js';
 
 const client = new WhizuraiClient({
   apiKey: 'your-api-key',
-  baseUrl: 'https://api.whizurai.com' // Optional, defaults to https://api.whizurai.com
+  baseUrl: 'https://api.whizur.ai' // Optional, defaults to https://api.whizur.ai
 });
 ```
 
@@ -609,12 +609,12 @@ const capability: Capability = capabilities[0];
 
 ## Authentication
 
-The SDK uses API key authentication. Get your API key from the [Whizurai Dashboard](https://dashboard.whizurai.com).
+The SDK uses API key authentication. Get your API key from the [Whizurai Dashboard](https://whizur.ai).
 
 ```typescript
 const client = new WhizuraiClient({
   apiKey: process.env.WHIZURAI_API_KEY!,
-  baseUrl: 'https://api.whizurai.com' // Optional
+  baseUrl: 'https://api.whizur.ai' // Optional
 });
 ```
 

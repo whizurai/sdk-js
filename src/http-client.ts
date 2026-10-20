@@ -7,7 +7,7 @@ import axios, { AxiosInstance, AxiosError } from 'axios';
 import { WhizuraiConfig } from './types';
 import { errorForStatus, TimeoutError } from './errors';
 
-export const DEFAULT_BASE_URL = 'https://api.whizurai.com';
+export const DEFAULT_BASE_URL = 'https://api.whizur.ai';
 export const SDK_VERSION = '3.3.0';
 
 /** Connection settings for one HTTP client (gateway or model-router). */
