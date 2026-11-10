@@ -311,6 +311,30 @@ processImage().catch(console.error);
 > instead — capabilities wrap those primitives with validation, routing, and
 > artifact tracking.
 
+## Image generation with a reference image
+
+`image:generate@v4` takes an optional reference image. Where your app's images
+run on the local fleet, the render starts from it (img2img): about 0.3 borrows
+its palette, light and mood for a new picture; about 0.6 keeps its composition.
+Anywhere else the platform refuses it rather than ignore it. Send one source.
+
+```typescript
+import { IMAGE_GENERATE, type ImageGenerateInput } from '@whizurai/sdk-js';
+
+const input: ImageGenerateInput = {
+  prompt: 'a cozy bar on trivia night, warm light, no people, no text',
+  size: '1024x1024',
+  referenceImageBase64: bytes.toString('base64'),
+  referenceImageContentType: 'image/jpeg',
+  referenceStrength: 0.3,
+};
+const { run } = await client.capabilities.run(IMAGE_GENERATE, { ...input }, { idempotencyKey });
+```
+
+The image artifact's `metadata.reference` (`{ sha256, strength }`) is what the
+render actually started from; compare the hash with your bytes. A run whose
+runtime did not confirm the reference fails `imagegen/reference_not_applied`.
+
 ## Speech synthesis
 
 `speech:synthesize` is a capability, so it runs through `capabilities.run`; the

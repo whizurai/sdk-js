@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.5.0
+
+### Added
+
+- Typed `image:generate@v4` input: `IMAGE_GENERATE`, `ImageGenerateInput`,
+  `ImageGenerateReference` (mirroring `@whizurai/types` 1.6.0). v4 adds an
+  optional reference image (`referenceImageUrl` | `referenceImageArtifactId` |
+  `referenceImageBase64` + `referenceImageContentType`, with `referenceStrength`
+  0.05-0.95), honoured on the local fleet as img2img. No new method: run it with
+  `client.capabilities.run(IMAGE_GENERATE, { ...input })`.
+
 ## 3.4.0
 
 ### Added

@@ -17,7 +17,8 @@ import {
   WhizuraiError,
   SPEECH_SYNTHESIZE,
 } from '../src/index';
-import type { SpeechSynthesizeInput, SpeechSynthesizeResult } from '../src/index';
+import type { SpeechSynthesizeInput, SpeechSynthesizeResult, ImageGenerateInput, ImageGenerateReference } from '../src/index';
+import { IMAGE_GENERATE } from '../src/index';
 
 jest.mock('axios');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -164,6 +165,21 @@ describe('capabilities', () => {
       { webhookUrl: 'https://a.example/hook', runFlags: { callbackUrl: 'https://b.example/hook' } }
     );
     expect(mockHttp.post.mock.calls[1][1].runFlags).toEqual({ callbackUrl: 'https://b.example/hook' });
+  });
+
+  it('run() passes an image:generate input with a reference image through unchanged', async () => {
+    mockHttp.post.mockResolvedValue({ data: { run: { id: 'r3', status: 'pending' } } });
+    const input: ImageGenerateInput = {
+      prompt: 'a cozy bar',
+      size: '1024x1024',
+      referenceImageBase64: 'AAAA',
+      referenceImageContentType: 'image/jpeg',
+      referenceStrength: 0.3,
+    };
+    await client.capabilities.run(IMAGE_GENERATE, { ...input });
+    expect(mockHttp.post).toHaveBeenCalledWith('/v1/capabilities/image%3Agenerate/execute', { input }, { headers: {} });
+    const reported: ImageGenerateReference = { sha256: 'c'.repeat(64), strength: 0.3 };
+    expect(reported.strength).toBe(0.3);
   });
 
   it('run() passes a qwen3-tts speech input through unchanged', async () => {

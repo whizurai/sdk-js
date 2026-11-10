@@ -374,6 +374,7 @@ export interface StatusResponse {
 // Capability-specific typed shapes.
 export * from './video-multi-shot';
 export * from './speech-synthesize';
+export * from './image-generate';
 export * from './inference';
 export * from './gateway-inference';
 export * from './video-routes';
