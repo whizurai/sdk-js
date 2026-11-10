@@ -214,6 +214,7 @@ export {
 } from './types/inference';
 // Capability slug constants (values; `export type *` below carries only types).
 export { SPEECH_SYNTHESIZE } from './types/speech-synthesize';
+export { IMAGE_GENERATE } from './types/image-generate';
 export { VIDEO_MULTI_SHOT } from './types/video-multi-shot';
 
 // Errors.
