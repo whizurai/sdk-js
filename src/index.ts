@@ -48,6 +48,7 @@ import {
   RerankOutcome,
   RerankParams,
   StatusResponse,
+  VideoRouteTable,
   WhizuraiConfig,
 } from './types';
 
@@ -164,6 +165,17 @@ export class WhizuraiClient {
   async status(): Promise<StatusResponse> {
     const res = await this._http.get('/v1/status');
     return res.data as StatusResponse;
+  }
+
+  /**
+   * The video route table (`GET /v1/model-router/video-routes`): which video
+   * models a requirements-routed shot can land on, per tier, and whether the
+   * router picks each automatically or only when named. Apps that price video
+   * check their price list against it. Check `version` before trusting it.
+   */
+  async getVideoRoutes(): Promise<VideoRouteTable> {
+    const res = await this._http.get('/v1/model-router/video-routes');
+    return res.data as VideoRouteTable;
   }
 }
 

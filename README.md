@@ -351,6 +351,19 @@ timestamps) or `aligned` (forced alignment, with the aligner `model` and a
 `confidence`). Both are `null`, or absent on an older platform, when no timing
 was established, so render plain text in that case.
 
+## Video route table
+
+Which video models a requirements-routed shot can land on, per route tier
+(`GET /v1/model-router/video-routes`). Apps that price video check their price
+list against it, so a routing change cannot land on an unpriced model.
+
+```ts
+const table = await client.getVideoRoutes();
+if (table.version !== 1) throw new Error('unknown route table version');
+table.tiers.directed.defaultModel; // 'bytedance/seedance-2-5'
+table.models.filter((m) => m.reach === 'explicit'); // reachable only when named
+```
+
 ## Text generation and image description (gateway)
 
 `generateText()` and `describeImage()` call the api-gateway at `baseUrl` (no

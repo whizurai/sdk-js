@@ -8,7 +8,7 @@ import { WhizuraiConfig } from './types';
 import { errorForStatus, TimeoutError } from './errors';
 
 export const DEFAULT_BASE_URL = 'https://api.whizur.ai';
-export const SDK_VERSION = '3.3.0';
+export const SDK_VERSION = '3.4.0';
 
 /** Connection settings for one HTTP client (gateway or model-router). */
 export type HttpClientConfig = Required<Pick<WhizuraiConfig, 'apiKey' | 'baseUrl' | 'timeout'>>;
