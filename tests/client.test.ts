@@ -417,6 +417,21 @@ describe('triggers', () => {
     expect((await client.status()).version).toBe('0.2.0');
     expect(mockHttp.get).toHaveBeenCalledWith('/v1/status');
   });
+
+  it('getVideoRoutes() reads the model-router video route table', async () => {
+    const table = {
+      version: 1,
+      tierOrder: ['standard', 'directed'],
+      tiers: {
+        standard: { defaultModel: null, automaticModels: [] },
+        directed: { defaultModel: 'bytedance/seedance-2-5', automaticModels: ['bytedance/seedance-2-5'] },
+      },
+      models: [{ model: 'bytedance/seedance-2-5', routeTier: 'directed', lifecycle: 'validated', reach: 'automatic' }],
+    };
+    mockHttp.get.mockResolvedValueOnce({ data: table });
+    expect(await client.getVideoRoutes()).toEqual(table);
+    expect(mockHttp.get).toHaveBeenCalledWith('/v1/model-router/video-routes');
+  });
 });
 
 describe('error normalization', () => {
