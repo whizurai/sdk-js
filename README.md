@@ -184,6 +184,44 @@ const img = document.createElement('img');
 img.src = url;
 ```
 
+## Outcomes
+
+An outcome is a published, versioned result (a product shot, a social post
+set) run by its slug. `inputs` are keyed by the outcome's unlocked
+`fieldKey`s, the ones its launch page and "Use in app" snippet list.
+
+```typescript
+const handle = await client.outcomes.run(
+  'product-shot',
+  { prompt: 'a red bicycle on a white background' },
+  { idempotencyKey: 'order-1234' } // optional; also appId, variant, customerId
+);
+
+const run = await client.outcomes.pollUntilDone(handle.id, {
+  interval: 2000,
+  timeout: 600_000,
+  onUpdate: (r) => console.log(r.status), // PENDING → RUNNING → SUCCEEDED
+});
+
+if (run.status === 'SUCCEEDED') {
+  console.log(run.result, run.acuConsumed);
+  const assets = await client.outcomes.assets(run.id); // [{ id, type, storageRef, metadata, tags, createdAt }]
+} else {
+  console.error(run.errorCode, run.errorMessage);
+}
+```
+
+- `run()` resolves for a new run (202) and for an idempotent replay (200: same
+  key, same inputs). The same key with other inputs throws a `WhizuraiError`
+  with `code: 'IDEMPOTENCY_CONFLICT'` (409).
+- `pollUntilDone()` stops at `SUCCEEDED`, `FAILED` or `CANCELLED`
+  (`TERMINAL_OUTCOME_RUN_STATUSES`) and resolves for all three; it throws
+  `TimeoutError` only when the run is still going at `timeout`.
+- `INSUFFICIENT_BALANCE` (402) carries `details.purchase.url`, where ACU can be
+  added. `BILLING_NOT_PROVISIONED` (409) cannot be fixed by buying ACU.
+- `client.outcomes.getRun(id)` reads one run; `client.outcomes.listRuns(slug, { limit, cursor })`
+  pages an outcome's runs, newest first.
+
 ## Triggers
 
 Triggers automate capability execution based on events.

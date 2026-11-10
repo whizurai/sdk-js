@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.6.0
+
+### Added
+
+- `client.outcomes` (`OutcomesResource`) for running published outcomes by slug:
+  `run(slug, inputs, options?)` (`POST /v1/outcomes/{slug}/runs`; options
+  `appId`, `variant`, `idempotencyKey`, `customerId`), `getRun(id)`
+  (`GET /v1/outcomes/runs/{id}`), `assets(id)` (`GET /v1/outcomes/runs/{id}/assets`),
+  `listRuns(slug, { limit, cursor })` (`GET /v1/outcomes/{slug}/runs`) and
+  `pollUntilDone(id, { interval, timeout, onUpdate })`, which stops at
+  `SUCCEEDED` / `FAILED` / `CANCELLED` and throws `TimeoutError` past `timeout`.
+  Types mirror `@whizurai/types` 1.7.0: `OutcomeRun`, `OutcomeRunHandle`,
+  `OutcomeRunStatus`, `TERMINAL_OUTCOME_RUN_STATUSES`, `OutcomeRunAsset`,
+  `OutcomeRunSummary`, `ListOutcomeRunsResponse`, `RunOutcomeRequest`,
+  `OutcomeErrorResponse`.
+
+### Fixed
+
+- The `User-Agent` version (`SDK_VERSION`) read 3.4.0 in 3.5.0; it now tracks
+  the package version.
+
 ## 3.5.0
 
 ### Added

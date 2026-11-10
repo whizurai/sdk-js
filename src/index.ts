@@ -2,9 +2,9 @@
  * Whizurai TypeScript/JavaScript SDK
  *
  * Official, capability-first SDK for the Whizurai Platform. The client exposes
- * exactly four resources — `capabilities`, `runs`, `artifacts`, `triggers` —
+ * five resources — `capabilities`, `runs`, `artifacts`, `triggers`, `outcomes` —
  * mirroring the platform's public REST surface (`/v1/capabilities/{id}/execute`,
- * `/v1/workflow-runs`, `/v1/artifacts`, `/v1/triggers`).
+ * `/v1/workflow-runs`, `/v1/artifacts`, `/v1/triggers`, `/v1/outcomes`).
  *
  * @example
  * ```ts
@@ -17,6 +17,11 @@
  * });
  * const done = await client.runs.pollUntilDone(run.id);
  * const artifacts = await client.runs.artifacts(done.id);
+ *
+ * // A published outcome, by slug:
+ * const handle = await client.outcomes.run('product-shot', { prompt: 'a red bicycle' });
+ * const finished = await client.outcomes.pollUntilDone(handle.id);
+ * const assets = await client.outcomes.assets(finished.id);
  * ```
  */
 
@@ -26,6 +31,7 @@ import { CapabilitiesResource } from './resources/capabilities';
 import { RunsResource } from './resources/runs';
 import { ArtifactsResource } from './resources/artifacts';
 import { TriggersResource } from './resources/triggers';
+import { OutcomesResource } from './resources/outcomes';
 import { InferenceResource } from './resources/inference';
 import { GatewayInferenceResource } from './resources/gateway-inference';
 import {
@@ -61,6 +67,8 @@ export class WhizuraiClient {
   readonly artifacts: ArtifactsResource;
   /** Manage event-driven triggers. */
   readonly triggers: TriggersResource;
+  /** Run published outcomes by slug, poll them, and read their assets. */
+  readonly outcomes: OutcomesResource;
 
   private readonly _http: AxiosInstance;
   private readonly _inference: InferenceResource;
@@ -85,6 +93,7 @@ export class WhizuraiClient {
     this.runs = new RunsResource(this._http);
     this.artifacts = new ArtifactsResource(this._http);
     this.triggers = new TriggersResource(this._http);
+    this.outcomes = new OutcomesResource(this._http);
     this._inference = new InferenceResource(this._config);
     this._gatewayInference = new GatewayInferenceResource(this._http);
   }
@@ -195,6 +204,9 @@ export type { ListRunsOptions } from './resources/runs';
 export { ArtifactsResource } from './resources/artifacts';
 export type { ListArtifactsOptions } from './resources/artifacts';
 export { TriggersResource } from './resources/triggers';
+export { OutcomesResource } from './resources/outcomes';
+export type { RunOutcomeOptions, PollOutcomeRunOptions } from './resources/outcomes';
+export { TERMINAL_OUTCOME_RUN_STATUSES } from './types/outcomes';
 export { InferenceResource, rerankDegradeReason } from './resources/inference';
 export { GatewayInferenceResource } from './resources/gateway-inference';
 

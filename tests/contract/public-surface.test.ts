@@ -2,7 +2,7 @@
  * Public Surface Snapshot Test
  *
  * Ensures the default WhizuraiClient exposes ONLY the capability-first surface
- * (capabilities, runs, artifacts, triggers) and never the admin/workflow surface
+ * (capabilities, runs, artifacts, triggers, outcomes) and never the admin/workflow surface
  * (workflows.run(), workflowRuns.create(), capability CRUD).
  *
  * The properties probed here (workflows, workflowRuns, capability CRUD) do not
@@ -50,7 +50,7 @@ describe('Public Surface Snapshot Test', () => {
   it('should ONLY export capability-first resources in WhizuraiClient', () => {
     const client = makeClient();
 
-    const expectedResources = ['capabilities', 'runs', 'artifacts', 'triggers'];
+    const expectedResources = ['capabilities', 'runs', 'artifacts', 'triggers', 'outcomes'];
 
     const clientKeys = Object.keys(client).filter(
       (key) =>

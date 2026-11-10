@@ -65,11 +65,12 @@ describe('WhizuraiClient construction', () => {
     client = new WhizuraiClient(config);
   });
 
-  it('builds with the four capability-first resources', () => {
+  it('builds with the five public resources', () => {
     expect(client.capabilities).toBeDefined();
     expect(client.runs).toBeDefined();
     expect(client.artifacts).toBeDefined();
     expect(client.triggers).toBeDefined();
+    expect(client.outcomes).toBeDefined();
   });
 
   it('does NOT expose the legacy workflow surface', () => {
