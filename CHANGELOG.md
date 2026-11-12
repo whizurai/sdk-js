@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.7.0
+
+### Added
+
+- Interactive outcome runs on `client.outcomes` (whizai-platform#905):
+  `workspace(runId)` (`GET /v1/outcomes/runs/{id}/workspace`),
+  `command(runId, command, { clientActionId })` (`POST /v1/outcomes/runs/{id}/commands`;
+  a UUID `clientActionId` is generated when omitted, and none is sent for a
+  `preview: true` command), `invocation(runId, invocationId)`
+  (`GET /v1/outcomes/runs/{id}/invocations/{invocationId}`) and `events(runId)`
+  (`GET /v1/outcomes/runs/{id}/events`).
+- `run()` accepts `executionPolicy: 'automatic' | 'review'`; `OutcomeRun.interactive`.
+- Types mirror `@whizurai/types` 1.9.0: `InteractiveCommand` and its members,
+  `InteractiveCommandRequest`/`Result`/`Response`, `InteractiveWorkspace` and its
+  views, `InteractiveInvocationDetail`, `OutcomeRunEvent`, `OutcomeExecutionPolicy`.
+  The mirror also picks up 1.8.0's `APP_MISMATCH` / `APP_NOT_FOUND` run error codes.
+
 ## 3.6.0
 
 ### Added

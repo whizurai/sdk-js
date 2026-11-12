@@ -222,6 +222,51 @@ if (run.status === 'SUCCEEDED') {
 - `client.outcomes.getRun(id)` reads one run; `client.outcomes.listRuns(slug, { limit, cursor })`
   pages an outcome's runs, newest first.
 
+### Interactive outcome runs
+
+An interactive outcome runs as independent item invocations a person (or a
+policy) authorizes one command at a time. Start it with
+`executionPolicy: 'review'` (only the first operation is authorized) or
+`'automatic'`; `getRun()` then reports `interactive: true`.
+
+```typescript
+const handle = await client.outcomes.run('interactive-five-shot-story', { idea: 'a fox learns to fly' }, {
+  executionPolicy: 'review',
+});
+
+const ws = await client.outcomes.workspace(handle.id); // items, slots, freshness, next actions, spend
+const shot = ws.items[0];
+
+// Generate the first shot's image from its chosen description.
+const { result, workspace } = await client.outcomes.command(handle.id, {
+  action: 'generate',
+  operation: 'image',
+  targets: [{ itemId: shot.id, sourceRevisionId: shot.description.chosen!.id }],
+}); // clientActionId generated; pass { clientActionId } to make a retry replay
+
+// Preview, then finish everything that is left within a cap.
+const preview = await client.outcomes.command(handle.id, {
+  action: 'finish_remaining',
+  expectedControlRevision: workspace.controlRevision,
+  preview: true,
+});
+await client.outcomes.command(handle.id, {
+  action: 'finish_remaining',
+  expectedControlRevision: preview.workspace.controlRevision,
+});
+
+const detail = await client.outcomes.invocation(handle.id, result.invocationIds[0]); // inputs, steps, cost
+const trail = await client.outcomes.events(handle.id); // oldest first
+```
+
+- Every command names the revision it acts on. A stale one throws a
+  `WhizuraiError` with `code: 'STATE_CHANGED'` (409) whose `details.workspace`
+  is the current workspace; re-read and retry.
+- Replaying a `clientActionId` resolves with the stored result
+  (`result.replayed`); reusing it for a different command is 409
+  `ACTION_KEY_REUSED`.
+- Platform doc: `whizai-platform/docs/interactive-outcome-runs.md`.
+
 ## Triggers
 
 Triggers automate capability execution based on events.
