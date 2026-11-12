@@ -67,7 +67,7 @@ export class WhizuraiClient {
   readonly artifacts: ArtifactsResource;
   /** Manage event-driven triggers. */
   readonly triggers: TriggersResource;
-  /** Run published outcomes by slug, poll them, and read their assets. */
+  /** Run published outcomes by slug, poll them, read their assets, and drive interactive runs. */
   readonly outcomes: OutcomesResource;
 
   private readonly _http: AxiosInstance;
@@ -205,7 +205,7 @@ export { ArtifactsResource } from './resources/artifacts';
 export type { ListArtifactsOptions } from './resources/artifacts';
 export { TriggersResource } from './resources/triggers';
 export { OutcomesResource } from './resources/outcomes';
-export type { RunOutcomeOptions, PollOutcomeRunOptions } from './resources/outcomes';
+export type { RunOutcomeOptions, PollOutcomeRunOptions, OutcomeCommandOptions } from './resources/outcomes';
 export { TERMINAL_OUTCOME_RUN_STATUSES } from './types/outcomes';
 export { InferenceResource, rerankDegradeReason } from './resources/inference';
 export { GatewayInferenceResource } from './resources/gateway-inference';

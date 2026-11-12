@@ -1,14 +1,22 @@
 /**
  * Outcomes resource — run a published outcome by slug, poll it to a terminal
- * status, and read the assets it delivered.
+ * status, and read the assets it delivered. Interactive item runs are driven
+ * with `workspace()`, `command()`, `invocation()` and `events()`.
  */
 
 import { AxiosInstance } from 'axios';
+import { v4 as uuidv4 } from 'uuid';
 import {
+  InteractiveCommand,
+  InteractiveCommandRequest,
+  InteractiveCommandResponse,
+  InteractiveInvocationDetail,
+  InteractiveWorkspace,
   ListOutcomeRunsQuery,
   ListOutcomeRunsResponse,
   OutcomeRun,
   OutcomeRunAsset,
+  OutcomeRunEvent,
   OutcomeRunHandle,
   RunOutcomeRequest,
   TERMINAL_OUTCOME_RUN_STATUSES,
@@ -26,6 +34,15 @@ export interface PollOutcomeRunOptions {
   /** Overall timeout in ms. Default: 600_000 (10 min) */
   timeout?: number;
   onUpdate?: (run: OutcomeRun) => void;
+}
+
+export interface OutcomeCommandOptions {
+  /**
+   * Idempotency key (8–200 chars). Generated (UUID v4) when omitted, except for
+   * a preview command (`command.preview === true`), which takes none. Pass your
+   * own to make a retry of the same user action replay instead of acting twice.
+   */
+  clientActionId?: string;
 }
 
 export class OutcomesResource {
@@ -63,6 +80,58 @@ export class OutcomesResource {
     const res = await this.http.get(`/v1/outcomes/${encodeURIComponent(slug)}/runs`, { params: query });
     const data = res.data ?? {};
     return { runs: data.runs ?? [], nextCursor: data.nextCursor ?? null };
+  }
+
+  /**
+   * Server-derived state of an interactive run (`GET /v1/outcomes/runs/{id}/workspace`):
+   * items in story order, every slot's chosen revision, versions and freshness,
+   * active and failed invocations, next actions with estimates, spend and the
+   * finish-remaining scope. 409 NOT_INTERACTIVE for a graph-walk run.
+   */
+  async workspace(runId: string): Promise<InteractiveWorkspace> {
+    const res = await this.http.get(`/v1/outcomes/runs/${encodeURIComponent(runId)}/workspace`);
+    return res.data as InteractiveWorkspace;
+  }
+
+  /**
+   * Send one interactive command (`POST /v1/outcomes/runs/{id}/commands`).
+   * Resolves with `{ result, workspace }` for an applied command or preview
+   * (202) and for a replay of the same `clientActionId` (200, `result.replayed`).
+   * A stale revision is 409 STATE_CHANGED (and the other 409 codes); the thrown
+   * error's `details.workspace` is the current workspace.
+   */
+  async command(
+    runId: string,
+    command: InteractiveCommand,
+    options: OutcomeCommandOptions = {}
+  ): Promise<InteractiveCommandResponse> {
+    const preview = 'preview' in command && command.preview === true;
+    const clientActionId = options.clientActionId ?? (preview ? undefined : uuidv4());
+    const body: InteractiveCommandRequest = {
+      ...(clientActionId !== undefined && { clientActionId }),
+      command,
+    };
+    const res = await this.http.post(`/v1/outcomes/runs/${encodeURIComponent(runId)}/commands`, body);
+    return res.data as InteractiveCommandResponse;
+  }
+
+  /**
+   * One attempt of an interactive run
+   * (`GET /v1/outcomes/runs/{id}/invocations/{invocationId}`): exact source
+   * revisions, the input Whiz resolved, per-step submitted requests, served
+   * model, acceptance state, timings and cost. Secrets are `[redacted]`.
+   */
+  async invocation(runId: string, invocationId: string): Promise<InteractiveInvocationDetail> {
+    const res = await this.http.get(
+      `/v1/outcomes/runs/${encodeURIComponent(runId)}/invocations/${encodeURIComponent(invocationId)}`
+    );
+    return res.data as InteractiveInvocationDetail;
+  }
+
+  /** The run's durable event trail, oldest first, at most 1000 (`GET /v1/outcomes/runs/{id}/events`). */
+  async events(runId: string): Promise<OutcomeRunEvent[]> {
+    const res = await this.http.get(`/v1/outcomes/runs/${encodeURIComponent(runId)}/events`);
+    return (res.data?.events ?? []) as OutcomeRunEvent[];
   }
 
   /**

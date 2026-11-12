@@ -192,4 +192,88 @@ describe('client.outcomes', () => {
   it('treats SUCCEEDED, FAILED and CANCELLED as terminal', () => {
     expect([...TERMINAL_OUTCOME_RUN_STATUSES].sort()).toEqual(['CANCELLED', 'FAILED', 'SUCCEEDED']);
   });
+  it('run() forwards executionPolicy', async () => {
+    mockHttp.post.mockResolvedValueOnce({ status: 202, data: { outcomeRun: { id: 'or_1', status: 'PENDING' } } });
+    await client.outcomes.run('five-shot', { idea: 'a fox' }, { executionPolicy: 'review' });
+    expect(mockHttp.post).toHaveBeenCalledWith('/v1/outcomes/five-shot/runs', {
+      executionPolicy: 'review',
+      inputs: { idea: 'a fox' },
+    });
+  });
+
+  describe('interactive runs', () => {
+    const workspace = { runId: 'or 1', status: 'RUNNING', mode: 'review', controlRevision: 3 };
+
+    it('workspace() reads /v1/outcomes/runs/{id}/workspace', async () => {
+      mockHttp.get.mockResolvedValueOnce({ data: workspace });
+      const ws = await client.outcomes.workspace('or 1');
+      expect(mockHttp.get).toHaveBeenCalledWith('/v1/outcomes/runs/or%201/workspace');
+      expect(ws).toEqual(workspace);
+    });
+
+    it('command() posts the command with the given clientActionId', async () => {
+      const body = { result: { controlRevision: 4, invocationIds: ['inv_1'], dispatch: true }, workspace };
+      mockHttp.post.mockResolvedValueOnce({ status: 202, data: body });
+      const command = {
+        action: 'generate' as const,
+        operation: 'image',
+        targets: [{ itemId: 'it_1', sourceRevisionId: 'rev_1' }],
+      };
+      const out = await client.outcomes.command('or_1', command, { clientActionId: 'action-0001' });
+      expect(mockHttp.post).toHaveBeenCalledWith('/v1/outcomes/runs/or_1/commands', {
+        clientActionId: 'action-0001',
+        command,
+      });
+      expect(out).toEqual(body);
+    });
+
+    it('command() generates a UUID clientActionId when omitted', async () => {
+      mockHttp.post.mockResolvedValueOnce({ status: 202, data: { result: {}, workspace } });
+      await client.outcomes.command('or_1', { action: 'pause', expectedControlRevision: 3 });
+      const sent = mockHttp.post.mock.calls[0][1];
+      expect(sent.command).toEqual({ action: 'pause', expectedControlRevision: 3 });
+      expect(sent.clientActionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    });
+
+    it('command() sends no clientActionId for a preview', async () => {
+      mockHttp.post.mockResolvedValueOnce({ status: 202, data: { result: { preview: {} }, workspace } });
+      await client.outcomes.command('or_1', { action: 'finish_remaining', expectedControlRevision: 3, preview: true });
+      expect(mockHttp.post).toHaveBeenCalledWith('/v1/outcomes/runs/or_1/commands', {
+        command: { action: 'finish_remaining', expectedControlRevision: 3, preview: true },
+      });
+    });
+
+    it('command() surfaces STATE_CHANGED with the current workspace', async () => {
+      const body = { error: 'STATE_CHANGED', message: 'Refresh.', workspace };
+      mockHttp.post.mockReturnValueOnce(responseErrorInterceptor(makeAxiosError(409, body)));
+      await expect(
+        client.outcomes.command('or_1', { action: 'retry', invocationId: 'inv_1' }, { clientActionId: 'action-0002' })
+      ).rejects.toMatchObject({ code: 'STATE_CHANGED', status: 409, details: body });
+    });
+
+    it('invocation() reads one invocation', async () => {
+      const detail = { invocation: { id: 'inv/1' }, acceptance: 'submitted' };
+      mockHttp.get.mockResolvedValueOnce({ data: detail });
+      expect(await client.outcomes.invocation('or_1', 'inv/1')).toEqual(detail);
+      expect(mockHttp.get).toHaveBeenCalledWith('/v1/outcomes/runs/or_1/invocations/inv%2F1');
+    });
+
+    it('events() returns the events array, empty when absent', async () => {
+      const event = {
+        id: 'ev_1',
+        outcomeRunId: 'or_1',
+        type: 'edit_applied',
+        actorType: 'api_key',
+        actorId: 'k1',
+        itemId: 'it_1',
+        data: null,
+        createdAt: '2026-11-11T00:00:00.000Z',
+      };
+      mockHttp.get.mockResolvedValueOnce({ data: { events: [event] } });
+      expect(await client.outcomes.events('or_1')).toEqual([event]);
+      expect(mockHttp.get).toHaveBeenCalledWith('/v1/outcomes/runs/or_1/events');
+      mockHttp.get.mockResolvedValueOnce({ data: {} });
+      expect(await client.outcomes.events('or_1')).toEqual([]);
+    });
+  });
 });
