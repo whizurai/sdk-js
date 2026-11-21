@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.8.0
+
+### Added
+
+- `ExecutionPolicy` gains `'fleet-then-hosted'` (whizai-platform#993): the fleet first, as
+  `fleet-required`; after a fleet decline, an app opted in on WhizAI's side may have an
+  `interactive` text request answered by a hosted model. Any other app or class: exactly
+  `fleet-required`.
+- `GenerateTextExecution` / `ChatExecution` document `execution: 'hosted'` and the hosted
+  attribution fields (`provider`, `served_model`, `fleet_declined_reason`, `hosted_fallback`,
+  `cost_usd`). Types mirror `@whizurai/types` 1.10.0.
+
 ## 3.7.0
 
 ### Added

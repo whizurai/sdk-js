@@ -354,7 +354,7 @@ export interface ChatResolution {
  */
 export interface ChatExecution {
   provider?: string;
-  /** `fleet` when a fleet worker ran it. */
+  /** `fleet` when a fleet worker ran it; `hosted` when a hosted model answered (`fleet-then-hosted`). */
   execution?: string;
   fleet_job_id?: string;
   /** Runtime that produced it (`vllm`, `sglang`, `ollama`, ...). */
@@ -378,8 +378,16 @@ export interface ChatCompletionResponse {
   request_id?: string | null;
 }
 
-/** model-router execution policy, sent as `x-execution-policy`. */
-export type ExecutionPolicy = 'fleet-required' | 'fleet-preferred' | 'fleet-disabled';
+/**
+ * model-router execution policy, sent as `x-execution-policy`.
+ *
+ * `fleet-then-hosted` runs on the fleet as `fleet-required`. After a fleet
+ * decline, an app opted in on WhizAI's side may have an `interactive`,
+ * non-streamed text request answered by a hosted model (`execution.execution`
+ * is then `'hosted'`). For any other app or class it is exactly
+ * `fleet-required`.
+ */
+export type ExecutionPolicy = 'fleet-required' | 'fleet-preferred' | 'fleet-disabled' | 'fleet-then-hosted';
 
 /** Parameters for {@link WhizuraiClient.chat} (camelCase, mapped to the wire). */
 export interface ChatParams {
