@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.9.0
+
+### Added
+
+- `GenerateTextExecution.provider_credits`: what the provider said it billed (kie.ai
+  `credits_consumed`), null when unknown (whizai-platform#995).
+- `ExecutionPolicy` `'fleet-then-hosted'` is honoured by `describeImage()` too, under its own
+  opt-in (whizai-platform#996); `DescribeImageResponse.metadata` documents the hosted
+  attribution. A hosted provider may now be `kieai` (Gemini through kie.ai), not `gemini`.
+  Types mirror `@whizurai/types` 1.11.0.
+
 ## 3.8.0
 
 ### Added

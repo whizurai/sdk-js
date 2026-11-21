@@ -74,7 +74,7 @@ export interface GenerateTextExecution {
   execution?: 'fleet' | 'direct' | 'hosted' | string;
   runtime?: string;
   fleet_job_id?: string;
-  /** Hosted answers (`fleet-then-hosted`): the provider that served it, e.g. `openai`, `gemini`. */
+  /** Hosted answers (`fleet-then-hosted`): the provider that served it, e.g. `openai`, `kieai` (Gemini through kie.ai). */
   provider?: string;
   /** Hosted answers: the model id the provider reported. */
   served_model?: string;
@@ -89,6 +89,8 @@ export interface GenerateTextExecution {
   };
   /** Hosted answers: list-price estimate in USD from reported tokens; null when unknown (never 0). */
   cost_usd?: number | null;
+  /** Hosted answers: what the provider said it billed (kie.ai `credits_consumed`); null when it says nothing. */
+  provider_credits?: number | null;
   [key: string]: unknown;
 }
 
@@ -158,7 +160,14 @@ export interface DescribeImageResponse {
   /** Wall-clock seconds. */
   responseTime: number;
   usage?: Record<string, number>;
-  /** Execution attribution (endpoint, runtime, fleet job, worker) where known. */
+  /**
+   * Execution attribution (endpoint, runtime, fleet job, worker) where known.
+   * With `metadata.executionPolicy: 'fleet-then-hosted'` from an app opted in on
+   * WhizAI's side (`HOSTED_VISION_FALLBACK_BY_APP`), a hosted answer carries the
+   * same fields as `GenerateTextExecution` (`execution: 'hosted'`, `provider`,
+   * `served_model`, `fleet_declined_reason`, `hosted_fallback`, `cost_usd`,
+   * `provider_credits`), and `provider`/`model` above name the hosted model.
+   */
   metadata?: Record<string, unknown>;
 }
 
