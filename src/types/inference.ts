@@ -384,8 +384,9 @@ export interface ChatCompletionResponse {
  * `fleet-then-hosted` runs on the fleet as `fleet-required`. After a fleet
  * decline, an app opted in on WhizAI's side may have an `interactive`,
  * non-streamed text request answered by a hosted model (`execution.execution`
- * is then `'hosted'`). For any other app or class it is exactly
- * `fleet-required`.
+ * is then `'hosted'`). An opt-in may also name `production`, and image
+ * description (`describeImage`) honours it under its own opt-in. For any other
+ * app or class it is exactly `fleet-required`.
  */
 export type ExecutionPolicy = 'fleet-required' | 'fleet-preferred' | 'fleet-disabled' | 'fleet-then-hosted';
 
