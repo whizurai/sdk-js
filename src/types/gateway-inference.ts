@@ -71,9 +71,24 @@ export interface GenerateTextRequest {
  * tier from its absence.
  */
 export interface GenerateTextExecution {
-  execution?: 'fleet' | 'direct' | string;
+  execution?: 'fleet' | 'direct' | 'hosted' | string;
   runtime?: string;
   fleet_job_id?: string;
+  /** Hosted answers (`fleet-then-hosted`): the provider that served it, e.g. `openai`, `gemini`. */
+  provider?: string;
+  /** Hosted answers: the model id the provider reported. */
+  served_model?: string;
+  /** Hosted answers: why the fleet did not answer (`no_worker_claimed`, `caller_deadline_exceeded`, ...). */
+  fleet_declined_reason?: string;
+  /** Hosted answers: every hosted target tried, in order, and what it did. */
+  hosted_fallback?: {
+    taken: boolean;
+    answered?: boolean;
+    reason?: string;
+    attempts?: Array<{ target: string; outcome: string; ms?: number; [key: string]: unknown }>;
+  };
+  /** Hosted answers: list-price estimate in USD from reported tokens; null when unknown (never 0). */
+  cost_usd?: number | null;
   [key: string]: unknown;
 }
 
