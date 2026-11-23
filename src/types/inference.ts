@@ -388,7 +388,12 @@ export interface ChatCompletionResponse {
  * description (`describeImage`) honours it under its own opt-in. For any other
  * app or class it is exactly `fleet-required`.
  */
-export type ExecutionPolicy = 'fleet-required' | 'fleet-preferred' | 'fleet-disabled' | 'fleet-then-hosted';
+export type ExecutionPolicy =
+  | 'fleet-required'
+  | 'fleet-preferred'
+  | 'fleet-disabled'
+  | 'fleet-then-hosted'
+  | 'hosted-first';
 
 /** Parameters for {@link WhizuraiClient.chat} (camelCase, mapped to the wire). */
 export interface ChatParams {
