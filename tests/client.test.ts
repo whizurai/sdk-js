@@ -214,6 +214,21 @@ describe('capabilities', () => {
     expect(result.servedEngine).toBe('qwen3-tts');
   });
 
+  it('getRun() reads the capability-run route, not workflow-runs, and unwraps { run }', async () => {
+    mockHttp.get.mockResolvedValue({ data: { run: { id: 'cr1', status: 'succeeded', result: { kind: 'coding' } } } });
+    const run = await client.capabilities.getRun('cr1');
+    expect(mockHttp.get).toHaveBeenCalledWith('/v1/capabilities/capability-runs/cr1');
+    expect(run.status).toBe('succeeded');
+    expect(run.result).toEqual({ kind: 'coding' });
+  });
+
+  it('getRun() encodes the run id', async () => {
+    mockHttp.get.mockResolvedValue({ data: { id: 'a/b', status: 'running' } });
+    const run = await client.capabilities.getRun('a/b');
+    expect(mockHttp.get).toHaveBeenCalledWith('/v1/capabilities/capability-runs/a%2Fb');
+    expect(run.status).toBe('running');
+  });
+
   it('cancel() posts to the capability-run cancel route', async () => {
     mockHttp.post.mockResolvedValue({ data: { id: 'r1', status: 'cancelled' } });
     const res = await client.capabilities.cancel('r1');

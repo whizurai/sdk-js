@@ -98,6 +98,15 @@ if (run.output) {
 }
 ```
 
+`runs.get()` reads **workflow** runs. When `capabilities.run()` hands back a
+capability-run id (for example with `executionMode: 'api'`), read it with
+`capabilities.getRun()` instead; `runs.get()` answers 404 for that id:
+
+```typescript
+const { run } = await client.capabilities.run('staff.coding-edit', input, { executionMode: 'api' });
+const latest = await client.capabilities.getRun(run.id); // status, result, workflowRunId
+```
+
 ### List Runs
 
 ```typescript
