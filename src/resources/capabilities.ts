@@ -15,7 +15,11 @@ import {
   ListCapabilitiesResponse,
   Run,
   RunCapabilityOptions,
+  RunEvent,
+  RunEventsOptions,
 } from '../types';
+import { SseParser } from '../sse';
+import { WhizuraiError } from '../errors';
 
 export class CapabilitiesResource {
   constructor(private readonly http: AxiosInstance) {}
@@ -89,6 +93,75 @@ export class CapabilitiesResource {
     const data = res.data;
     // Platform wraps as { run: {...} }; tolerate the unwrapped shape too.
     return (data && typeof data === 'object' && 'run' in data ? data.run : data) as Run;
+  }
+
+  /**
+   * Follow a capability run's live events
+   * (`GET /v1/capabilities/capability-runs/:runId/events`, Server-Sent Events):
+   * every chunk its worker streams, in order, then one `end` event. A dropped
+   * connection resumes from the last sequence received (`Last-Event-ID`), so no
+   * chunk is delivered twice or skipped. Node.js only (it reads a response stream).
+   *
+   * ```ts
+   * for await (const event of client.capabilities.runEvents(run.id)) {
+   *   if (event.type === 'chunk') handle(event.chunks)
+   *   else console.log('finished', event.status)
+   * }
+   * ```
+   */
+  async *runEvents(runId: string, options: RunEventsOptions = {}): AsyncGenerator<RunEvent> {
+    let after = options.after ?? -1;
+    const maxReconnects = options.maxReconnects ?? 5;
+    let failures = 0;
+    for (;;) {
+      if (options.signal?.aborted) return;
+      let ended = false;
+      try {
+        const res = await this.http.get(
+          `/v1/capabilities/capability-runs/${encodeURIComponent(runId)}/events`,
+          {
+            responseType: 'stream',
+            timeout: 0,
+            headers: { Accept: 'text/event-stream', ...(after >= 0 ? { 'Last-Event-ID': String(after) } : {}) },
+            ...(after >= 0 ? { params: { after } } : {}),
+            ...(options.signal ? { signal: options.signal } : {}),
+          }
+        );
+        const parser = new SseParser();
+        const decoder = new TextDecoder();
+        for await (const piece of res.data as AsyncIterable<Uint8Array | string>) {
+          const text = typeof piece === 'string' ? piece : decoder.decode(piece, { stream: true });
+          for (const event of parser.push(text)) {
+            if (event.event === 'chunk') {
+              const body = JSON.parse(event.data) as { seq: number; chunks: unknown[] };
+              if (body.seq <= after) continue;
+              after = body.seq;
+              failures = 0;
+              yield { type: 'chunk', seq: body.seq, chunks: Array.isArray(body.chunks) ? body.chunks : [] };
+            } else if (event.event === 'end') {
+              const body = JSON.parse(event.data) as { status: string };
+              ended = true;
+              yield { type: 'end', status: body.status };
+              return;
+            }
+          }
+        }
+      } catch (error) {
+        if (options.signal?.aborted) return;
+        const status = error instanceof WhizuraiError ? error.status : undefined;
+        // A definitive refusal (bad id, not yours, auth) is not retried.
+        if (status !== undefined && status < 500 && status !== 408 && status !== 429) throw error;
+        if (++failures > maxReconnects) throw error;
+        await new Promise((resolve) => setTimeout(resolve, Math.min(500 * 2 ** (failures - 1), 8000)));
+        continue;
+      }
+      if (ended) return;
+      // The server closed without an end event: reconnect from `after`.
+      if (++failures > maxReconnects) {
+        throw new WhizuraiError('Run event stream closed before the run ended', 'STREAM_CLOSED');
+      }
+      await new Promise((resolve) => setTimeout(resolve, Math.min(500 * 2 ** (failures - 1), 8000)));
+    }
   }
 
   /**

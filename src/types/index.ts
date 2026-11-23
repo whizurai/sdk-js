@@ -281,6 +281,26 @@ export interface ExecuteCapabilityResponse {
   run: Run;
 }
 
+/**
+ * One event from {@link CapabilitiesResource.runEvents}.
+ * `chunk`: what the executing worker streamed (for a live native coding turn:
+ * `{type:'coding_progress', text}` and `{type:'coding_file', path, sha256, size, base64}`
+ * / `{type:'coding_file', path, deleted: true}`), in order, numbered by `seq`.
+ * `end`: the run reached a terminal status; read the result with `getRun`.
+ */
+export type RunEvent =
+  | { type: 'chunk'; seq: number; chunks: unknown[] }
+  | { type: 'end'; status: string };
+
+export interface RunEventsOptions {
+  /** Resume after this sequence number (exclusive). Default: from the start. */
+  after?: number;
+  /** Stop listening; the iterator ends without error. */
+  signal?: AbortSignal;
+  /** Reconnect attempts after a dropped connection or a 429/5xx. Default 5. */
+  maxReconnects?: number;
+}
+
 /** Result of cancelling a capability run. */
 export interface CancelCapabilityRunResponse {
   id: string;
