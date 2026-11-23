@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.11.0
+
+### Added
+
+- `capabilities.getRun(runId)`: reads a capability run
+  (`GET /v1/capabilities/capability-runs/:runId`) by the id `capabilities.run()` returned.
+  `runs.get()` reads workflow runs and answers 404 for that id, so a caller polling a
+  capability run with it could never see it finish (TTS native staff builds, 2026-11-23).
+
 ## 3.10.0
 
 ### Added

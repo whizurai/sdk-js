@@ -13,6 +13,7 @@ import {
   ExecuteCapabilityResponse,
   ListCapabilitiesOptions,
   ListCapabilitiesResponse,
+  Run,
   RunCapabilityOptions,
 } from '../types';
 
@@ -70,6 +71,24 @@ export class CapabilitiesResource {
       { headers, ...(options.timeout !== undefined && { timeout: options.timeout }) }
     );
     return res.data as ExecuteCapabilityResponse;
+  }
+
+  /**
+   * Fetch a capability run (`GET /v1/capabilities/capability-runs/:runId`) by the
+   * id {@link CapabilitiesResource.run} returned. Poll this for its status and
+   * `result`.
+   *
+   * `runs.get()` reads WORKFLOW runs (`/v1/workflow-runs/:id`) and answers 404
+   * for a capability-run id; the underlying workflow run's id, when one exists,
+   * is this run's `workflowRunId`.
+   */
+  async getRun(runId: string): Promise<Run> {
+    const res = await this.http.get(
+      `/v1/capabilities/capability-runs/${encodeURIComponent(runId)}`
+    );
+    const data = res.data;
+    // Platform wraps as { run: {...} }; tolerate the unwrapped shape too.
+    return (data && typeof data === 'object' && 'run' in data ? data.run : data) as Run;
   }
 
   /**
