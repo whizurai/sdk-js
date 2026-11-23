@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.12.0
+
+### Added
+
+- `capabilities.runEvents(runId, { after?, signal?, maxReconnects? })`: an async iterator over
+  a capability run's live events (`GET /v1/capabilities/capability-runs/:runId/events`,
+  Server-Sent Events). Yields every chunk the worker streams, in order (`{type:'chunk', seq,
+  chunks}`), then `{type:'end', status}`. A dropped connection resumes from the last `seq`
+  with `Last-Event-ID`; 4xx refusals are not retried. Node.js only. Used for live native
+  coding turns (`coding_progress`, `coding_file` chunks).
+
 ## 3.11.0
 
 ### Added
