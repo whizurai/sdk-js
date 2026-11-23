@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.10.0
+
+### Added
+
+- `ExecutionPolicy` gains `'hosted-first'` (whizai-platform#1040): under the same opt-in as
+  `fleet-then-hosted`, the app's hosted chain answers first and the fleet runs only if it does
+  not. Honoured by `chat`, `generateText` and `describeImage`. Types mirror `@whizurai/types` 1.13.0.
+
 ## 3.9.0
 
 ### Added
