@@ -398,4 +398,5 @@ export * from './image-generate';
 export * from './inference';
 export * from './gateway-inference';
 export * from './video-routes';
+export * from './model-catalog';
 export * from './outcomes';

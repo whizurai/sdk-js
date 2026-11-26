@@ -54,6 +54,8 @@ import {
   RerankOutcome,
   RerankParams,
   StatusResponse,
+  CatalogOperation,
+  ModelCatalog,
   VideoRouteTable,
   WhizuraiConfig,
 } from './types';
@@ -185,6 +187,21 @@ export class WhizuraiClient {
   async getVideoRoutes(): Promise<VideoRouteTable> {
     const res = await this._http.get('/v1/model-router/video-routes');
     return res.data as VideoRouteTable;
+  }
+
+  /**
+   * The model catalogue (`GET /v1/model-router/catalog`): every model a caller
+   * may pass as `model`, per operation, with the operation's default and a
+   * dated provider price. `reach: 'automatic'` models may be the default;
+   * `'explicit'` ones run only when named. Pass `operation` to get one
+   * operation only; the platform answers 400 for an unknown one.
+   */
+  async getModelCatalog(operation?: CatalogOperation): Promise<ModelCatalog> {
+    const res = await this._http.get(
+      '/v1/model-router/catalog',
+      operation ? { params: { operation } } : undefined,
+    );
+    return res.data as ModelCatalog;
   }
 }
 

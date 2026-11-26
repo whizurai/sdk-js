@@ -37,6 +37,7 @@ export interface ImageGenerateInput {
   n?: number;
   /** 0 to 4294967295. Omitted: one is chosen and reported on the result. */
   seed?: number;
+  /** A catalogue id from `GET /v1/model-router/catalog` (operation `image_generate`). Omitted: the operation's default. */
   model?: string;
   provider?: string;
 

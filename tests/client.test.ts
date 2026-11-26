@@ -464,6 +464,38 @@ describe('triggers', () => {
     expect(await client.getVideoRoutes()).toEqual(table);
     expect(mockHttp.get).toHaveBeenCalledWith('/v1/model-router/video-routes');
   });
+
+  it('getModelCatalog() reads the model catalogue', async () => {
+    const catalog = {
+      version: '2026-11-25.1',
+      operations: [
+        {
+          operation: 'image_generate',
+          default: 'gpt-image-2',
+          models: [
+            {
+              id: 'gpt-image-2',
+              label: 'GPT Image 2',
+              provider: 'openai',
+              lifecycle: 'validated',
+              reach: 'automatic',
+              quality: 'standard',
+              price: { unit: 'image', usd: 0.04, pricedAt: '2026-11-25', source: 'https://example.com/pricing' },
+            },
+          ],
+        },
+      ],
+    };
+    mockHttp.get.mockResolvedValueOnce({ data: catalog });
+    expect(await client.getModelCatalog()).toEqual(catalog);
+    expect(mockHttp.get).toHaveBeenCalledWith('/v1/model-router/catalog', undefined);
+  });
+
+  it('getModelCatalog(operation) filters by operation', async () => {
+    mockHttp.get.mockResolvedValueOnce({ data: { version: '1', operations: [] } });
+    await client.getModelCatalog('image_edit');
+    expect(mockHttp.get).toHaveBeenCalledWith('/v1/model-router/catalog', { params: { operation: 'image_edit' } });
+  });
 });
 
 describe('error normalization', () => {
