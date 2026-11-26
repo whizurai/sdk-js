@@ -480,6 +480,21 @@ table.tiers.directed.defaultModel; // 'bytedance/seedance-2-5'
 table.models.filter((m) => m.reach === 'explicit'); // reachable only when named
 ```
 
+## Model catalogue
+
+Every model a caller may pass as `model` to a catalogue-backed capability
+(`image:generate`, `image:edit`), per operation, with the operation's default
+and a dated provider price (`GET /v1/model-router/catalog`). Retired models
+are absent, and naming one is refused with `model_not_available`.
+
+```ts
+const catalog = await client.getModelCatalog('image_edit');
+const [edit] = catalog.operations;
+edit.default; // the model used when a run names none
+edit.models.filter((m) => m.reach === 'explicit'); // run only when named
+await client.capabilities.run('image:edit', { /* ... */ model: edit.models[0].id });
+```
+
 ## Text generation and image description (gateway)
 
 `generateText()` and `describeImage()` call the api-gateway at `baseUrl` (no

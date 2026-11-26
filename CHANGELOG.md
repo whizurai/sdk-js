@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.13.0
+
+### Added
+
+- `client.getModelCatalog(operation?)` for `GET /v1/model-router/catalog`: every
+  model a caller may pass as `model`, per operation (`image_generate`,
+  `image_edit`), with the operation's default, each model's lifecycle, reach,
+  quality and dated provider price. Types: `ModelCatalog`,
+  `CatalogOperationView`, `CatalogModel`, `CatalogOperation`, `CatalogPrice`,
+  `CatalogLifecycle`, `CatalogReach`, `CatalogQuality`, `CatalogProvider`
+  (mirroring `@whizurai/types` 1.16.0).
+
 ## 3.12.0
 
 ### Added
